@@ -480,6 +480,13 @@ class TestElectroluxVacuumModern:
 class TestElectroluxVacuumAsyncSetupEntry:
     """Test async_setup_entry platform setup."""
 
+    @pytest.fixture(autouse=True)
+    def mock_platform(self):
+        with patch(
+            "custom_components.electrolux.vacuum.async_get_current_platform"
+        ) as mock:
+            yield mock
+
     @pytest.mark.asyncio
     async def test_async_setup_entry_creates_entities_for_rvc_types(self):
         """async_setup_entry creates vacuum entities for RVC appliance types."""
@@ -701,3 +708,67 @@ class TestElectroluxVacuumEdgeCases:
             vacuum.reported_state = status["properties"]["reported"]
 
         assert vacuum.fan_speed is None
+
+
+class TestElectroluxVacuumZoneCleaning:
+    """Test async_clean_zones service method."""
+
+    @pytest.mark.asyncio
+    async def test_clean_zones_sends_custom_play_command(self):
+        """async_clean_zones sends correct CustomPlay payload."""
+        vacuum = _make_purei9_vacuum()
+        vacuum.get_appliance.data.get_capability = MagicMock(return_value={"access": "readwrite"})
+
+        with patch(
+            "custom_components.electrolux.vacuum.execute_command_with_error_handling",
+            new=AsyncMock(),
+        ) as mock_execute:
+            await vacuum.async_clean_zones(
+                persistent_map_id="afb13c1b-b557-4a11-84a6-5bfaef90304e",
+                zones=[
+                    {"zone_id": "9082f714-bdba-4f3a-892f-46b2ff2e07de", "power_mode": 1},
+                    {"zone_id": "5cda7995-d3db-4f5d-bd53-b51099e0674c", "power_mode": 2},
+                ],
+            )
+
+        mock_execute.assert_awaited_once()
+        command = mock_execute.await_args.args[2]
+        assert command == {
+            "CustomPlay": {
+                "persistentMapId": "afb13c1b-b557-4a11-84a6-5bfaef90304e",
+                "zones": [
+                    {"goZonesId": "9082f714-bdba-4f3a-892f-46b2ff2e07de", "powerMode": 1},
+                    {"goZonesId": "5cda7995-d3db-4f5d-bd53-b51099e0674c", "powerMode": 2},
+                ],
+            }
+        }
+
+    @pytest.mark.asyncio
+    async def test_clean_zones_raises_when_capability_absent(self):
+        """async_clean_zones raises HomeAssistantError when CustomPlay not supported."""
+        from homeassistant.exceptions import HomeAssistantError
+
+        vacuum = _make_purei9_vacuum()
+        vacuum.get_appliance.data.get_capability = MagicMock(return_value=None)
+
+        with pytest.raises(HomeAssistantError, match="not supported on this device"):
+            await vacuum.async_clean_zones(
+                persistent_map_id="afb13c1b-b557-4a11-84a6-5bfaef90304e",
+                zones=[{"zone_id": "9082f714-bdba-4f3a-892f-46b2ff2e07de", "power_mode": 1}],
+            )
+
+    @pytest.mark.asyncio
+    async def test_clean_zones_reraises_execute_exception(self):
+        """async_clean_zones propagates errors from execute_command_with_error_handling."""
+        vacuum = _make_purei9_vacuum()
+        vacuum.get_appliance.data.get_capability = MagicMock(return_value={"access": "readwrite"})
+
+        with patch(
+            "custom_components.electrolux.vacuum.execute_command_with_error_handling",
+            new=AsyncMock(side_effect=Exception("appliance rejected")),
+        ):
+            with pytest.raises(Exception, match="appliance rejected"):
+                await vacuum.async_clean_zones(
+                    persistent_map_id="afb13c1b-b557-4a11-84a6-5bfaef90304e",
+                    zones=[{"zone_id": "9082f714-bdba-4f3a-892f-46b2ff2e07de", "power_mode": 1}],
+                )

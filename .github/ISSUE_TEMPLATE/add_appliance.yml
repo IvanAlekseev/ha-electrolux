@@ -2,7 +2,6 @@ name: 🏠 Add Appliance Support
 description: Submit diagnostics to add or improve support for a new or unverified appliance type
 title: "[Appliance]: <type> — <model>"
 labels: ["appliance-support"]
-assignees: []
 body:
   - type: markdown
     attributes:

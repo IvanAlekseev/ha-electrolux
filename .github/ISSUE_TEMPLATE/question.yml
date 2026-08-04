@@ -2,7 +2,6 @@ name: ❓ Question / Help
 description: Ask a question or get help with setup and configuration
 title: "[Question]: "
 labels: ["question"]
-assignees: []
 body:
   - type: markdown
     attributes:

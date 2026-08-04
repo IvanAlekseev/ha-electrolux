@@ -15,7 +15,7 @@ from .const import (
     CONF_NOTIFICATION_DEFAULT,
     CONF_NOTIFICATION_DIAG,
     CONF_NOTIFICATION_WARNING,
-    DOMAIN,  # noqa: F401 — re-exported for backward compatibility
+    DOMAIN,
     NAME,
     SECONDS_PER_MINUTE,
     TIME_INVALID_SENTINEL,
@@ -134,7 +134,7 @@ def fahrenheit_to_celsius(fahrenheit: float | None) -> float | None:
 
 
 async def execute_command_with_error_handling(
-    client: "ElectroluxApiClient",
+    client: ElectroluxApiClient,
     pnc_id: str,
     command: dict[str, Any],
     entity_attr: str,
@@ -402,14 +402,14 @@ def map_command_error_to_home_assistant_error(
         # Extract status code first
         status_code = getattr(ex, "status", None)
         if not status_code and hasattr(ex, "response"):
-            response = getattr(ex, "response")
+            response = ex.response
             status_code = getattr(response, "status", None)
         if not status_code and hasattr(ex, "status_code"):
-            status_code = getattr(ex, "status_code")
+            status_code = ex.status_code
 
         # Check if exception has response data
         if hasattr(ex, "response") and getattr(ex, "response", None):
-            response = getattr(ex, "response")
+            response = ex.response
             if hasattr(response, "json") and callable(getattr(response, "json", None)):
                 try:
                     error_data = response.json()
@@ -422,9 +422,9 @@ def map_command_error_to_home_assistant_error(
                     pass  # Text parsing failed, continue without error data
         # Check if exception has direct error data
         elif hasattr(ex, "error_data"):
-            error_data = getattr(ex, "error_data")
+            error_data = ex.error_data
         elif hasattr(ex, "details"):
-            error_data = getattr(ex, "details")
+            error_data = ex.details
 
         # If no structured data found, try parsing the exception message string
         if not error_data:
@@ -865,12 +865,12 @@ def format_command_for_appliance(
             # Special case: boolean input for string-based ON/OFF switches
             if isinstance(value, bool):
                 # Check if this is an ON/OFF switch (case-insensitive)
-                upper_values = {str(k).upper() for k in values_dict.keys()}
+                upper_values = {str(k).upper() for k in values_dict}
                 if upper_values == {"ON", "OFF"}:
                     # Convert boolean to appropriate string value
                     target_value = "ON" if value else "OFF"
                     # Find the exact key with matching case
-                    for key in values_dict.keys():
+                    for key in values_dict:
                         if key.upper() == target_value:
                             return key
                     # Fallback: return uppercase form (unreachable if ON/OFF keys are unique,
@@ -883,7 +883,7 @@ def format_command_for_appliance(
             else:
                 # Try to find a matching value by case-insensitive comparison
                 value_str = str(value).lower()
-                for key in values_dict.keys():
+                for key in values_dict:
                     if key.lower() == value_str:
                         return key
 

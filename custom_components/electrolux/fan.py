@@ -73,7 +73,6 @@ async def async_setup_entry(
                 appliance_id,
             )
             async_add_entities(entities)
-    return
 
 
 class ElectroluxFan(ElectroluxEntity, FanEntity):
@@ -129,7 +128,7 @@ class ElectroluxFan(ElectroluxEntity, FanEntity):
             if values := workmode_cap.get("values", {}):
                 # Extract all modes except PowerOff (that's handled by on/off)
                 self._preset_modes = [
-                    mode for mode in values.keys() if mode.lower() != "poweroff"
+                    mode for mode in values if mode.lower() != "poweroff"
                 ]
 
         self._attr_preset_modes = self._preset_modes if self._preset_modes else None
@@ -168,9 +167,8 @@ class ElectroluxFan(ElectroluxEntity, FanEntity):
                 condition.get("operator") == "eq"
                 and condition.get("operand_1") == "value"
                 and condition.get("operand_2") == current_mode
-            ):
-                if trigger.get("action", {}).get("Fanspeed", {}).get("disabled"):
-                    return True
+            ) and trigger.get("action", {}).get("Fanspeed", {}).get("disabled"):
+                return True
         return False
 
     @property
@@ -248,10 +246,8 @@ class ElectroluxFan(ElectroluxEntity, FanEntity):
             speed_value = int(fanspeed)
             # Map speed value to percentage (0-100)
             min_speed, max_speed = self._speed_range
-            if speed_value < min_speed:
-                speed_value = min_speed
-            if speed_value > max_speed:
-                speed_value = max_speed
+            speed_value = max(speed_value, min_speed)
+            speed_value = min(speed_value, max_speed)
 
             # Create ordered list for percentage conversion
             speed_range = list(range(min_speed, max_speed + 1))
@@ -561,7 +557,7 @@ class ElectroluxFan(ElectroluxEntity, FanEntity):
             coordinator: ElectroluxCoordinator = self.coordinator  # type: ignore[assignment]
             await coordinator.handle_authentication_error(auth_ex)
             raise
-        except Exception:  # noqa: BLE001
+        except Exception:
             # Re-raise any errors from execute_command_with_error_handling
             raise
         # Note: optimistic state updates are handled by the callers (_send_workmode_command

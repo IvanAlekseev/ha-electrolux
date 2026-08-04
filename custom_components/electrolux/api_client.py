@@ -21,7 +21,7 @@ _LOGGER: logging.Logger = logging.getLogger(__package__)
 
 def get_electrolux_session(
     api_key, access_token, refresh_token, hass=None, config_entry=None
-) -> "ElectroluxApiClient":
+) -> ElectroluxApiClient:
     """Return Electrolux API Session."""
     return ElectroluxApiClient(api_key, access_token, refresh_token, hass, config_entry)
 
@@ -59,7 +59,7 @@ async def retry_with_backoff(
     for attempt in range(max_retries + 1):
         try:
             return await coro_factory()
-        except (ConnectionError, TimeoutError, asyncio.TimeoutError) as ex:
+        except (ConnectionError, TimeoutError) as ex:
             last_exception = ex
             if attempt < max_retries:
                 logger.warning(
@@ -124,7 +124,7 @@ async def safe_api_call(
         else:
             return await coro_factory()
 
-    except (ConnectionError, TimeoutError, asyncio.TimeoutError) as ex:
+    except (ConnectionError, TimeoutError) as ex:
         logger.error("Network error during %s: %s", operation_name, ex)
         raise HomeAssistantError(
             f"Network connection failed during {operation_name}. Please check your internet connection."
@@ -170,7 +170,7 @@ async def safe_api_call(
 class _TokenRefreshHandler(logging.Handler):
     """Logging handler to detect token refresh failures and report to HA issue registry."""
 
-    def __init__(self, client: "ElectroluxApiClient", hass: HomeAssistant) -> None:
+    def __init__(self, client: ElectroluxApiClient, hass: HomeAssistant) -> None:
         super().__init__()
         self._client = client
         self._hass = hass

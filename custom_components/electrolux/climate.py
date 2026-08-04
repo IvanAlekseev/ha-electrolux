@@ -90,7 +90,6 @@ async def async_setup_entry(
                     list(capabilities_dict.keys()),
                 )
         async_add_entities(entities)
-    return
 
 
 class ElectroluxClimate(ElectroluxEntity, ClimateEntity, RestoreEntity):
@@ -204,7 +203,7 @@ class ElectroluxClimate(ElectroluxEntity, ClimateEntity, RestoreEntity):
         swing_capability = self.capability.get("horizontalSwing", {})
         values = swing_capability.get("values", {})
         if values:
-            return [str(mode).lower() for mode in values.keys()]
+            return [str(mode).lower() for mode in values]
         return None
 
     async def async_set_swing_horizontal_mode(self, swing_mode: str) -> None:
@@ -297,7 +296,7 @@ class ElectroluxClimate(ElectroluxEntity, ClimateEntity, RestoreEntity):
                 "DRY": HVACMode.DRY,
                 "FANONLY": HVACMode.FAN_ONLY,
             }
-            for mode_key in values.keys():
+            for mode_key in values:
                 if mode_key.upper() in mode_mapping:
                     modes.append(mode_mapping[mode_key.upper()])
 
@@ -360,7 +359,7 @@ class ElectroluxClimate(ElectroluxEntity, ClimateEntity, RestoreEntity):
         fan_capability = self.capability.get("fanSpeedSetting", {})
         values = fan_capability.get("values", {})
         if values:
-            return [str(mode).lower() for mode in values.keys()]
+            return [str(mode).lower() for mode in values]
         return None
 
     @property
@@ -378,7 +377,7 @@ class ElectroluxClimate(ElectroluxEntity, ClimateEntity, RestoreEntity):
         swing_capability = self.capability.get("verticalSwing", {})
         values = swing_capability.get("values", {})
         if values:
-            return [str(mode).lower() for mode in values.keys()]
+            return [str(mode).lower() for mode in values]
         return None
 
     @property

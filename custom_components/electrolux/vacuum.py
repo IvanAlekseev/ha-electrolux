@@ -4,7 +4,6 @@ import logging
 from typing import Any
 
 import voluptuous as vol
-
 from homeassistant.components.vacuum import StateVacuumEntity
 from homeassistant.components.vacuum.const import (
     VacuumActivity,
@@ -309,10 +308,10 @@ class ElectroluxVacuum(ElectroluxEntity, StateVacuumEntity):
 
             battery_min, battery_max = self._battery_status_range()
             if battery_min is None or battery_max is None or battery_max <= battery_min:
-                return int(round(battery_value))
+                return round(battery_value)
 
             if battery_max == 100 and battery_min in (0, 1):
-                return int(round(battery_value))
+                return round(battery_value)
 
             battery_value = max(
                 float(battery_min), min(float(battery_max), battery_value)
@@ -320,7 +319,7 @@ class ElectroluxVacuum(ElectroluxEntity, StateVacuumEntity):
             percentage = (
                 (battery_value - battery_min) / (battery_max - battery_min)
             ) * 100
-            return int(round(max(0.0, min(100.0, percentage))))
+            return round(max(0.0, min(100.0, percentage)))
         return None
 
     def _battery_status_range(self) -> tuple[int | None, int | None]:
@@ -335,7 +334,7 @@ class ElectroluxVacuum(ElectroluxEntity, StateVacuumEntity):
                     battery_max = battery_capability.get("max")
                     if battery_min is not None and battery_max is not None:
                         return int(battery_min), int(battery_max)
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
 
         if self._is_purei9:
@@ -393,7 +392,7 @@ class ElectroluxVacuum(ElectroluxEntity, StateVacuumEntity):
                     pm_min = int(cap.get("min", 1))
                     pm_max = int(cap.get("max", 3))
                     return pm_min, pm_max
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
         return 1, 3
 

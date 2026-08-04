@@ -324,7 +324,7 @@ class Appliance:
                 ex,
                 reported_data,
             )
-        except Exception:  # noqa: BLE001
+        except Exception:
             _LOGGER.exception(
                 "Unexpected error updating reported data for %s. Data: %s",
                 self.pnc_id,
@@ -370,12 +370,16 @@ class Appliance:
                     access = capability_info.get("access", "read")
                     if cap_type == "climate":
                         entity_type = CLIMATE
-                    elif cap_type in ("number", "int") and access in (
-                        "readwrite",
-                        "write",
+                    elif (
+                        cap_type in ("number", "int")
+                        and access
+                        in (
+                            "readwrite",
+                            "write",
+                        )
+                        or cap_type == "temperature"
+                        and access in ("readwrite", "write")
                     ):
-                        entity_type = NUMBER
-                    elif cap_type == "temperature" and access in ("readwrite", "write"):
                         entity_type = NUMBER
                     elif cap_type == "boolean" and access == "readwrite":
                         entity_type = SWITCH

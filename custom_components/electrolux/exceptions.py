@@ -17,40 +17,26 @@ REMOTE_CONTROL_ERROR_PHRASES = [
 class CommandError(Exception):
     """Base exception for command errors."""
 
-    pass
-
 
 class RemoteControlDisabledError(CommandError):
     """Remote control is disabled."""
-
-    pass
 
 
 class ApplianceOfflineError(CommandError):
     """Appliance is disconnected."""
 
-    pass
-
 
 class CommandValidationError(CommandError):
     """Command validation failed."""
-
-    pass
 
 
 class RateLimitError(CommandError):
     """Rate limit exceeded."""
 
-    pass
-
 
 class AuthenticationError(CommandError):
     """Authentication failed - tokens expired or invalid."""
 
-    pass
-
 
 class NetworkError(CommandError):
     """Network connectivity error."""
-
-    pass

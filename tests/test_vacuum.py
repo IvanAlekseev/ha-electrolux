@@ -753,7 +753,9 @@ class TestElectroluxVacuumZoneCleaning:
             )
 
         mock_execute.assert_awaited_once()
-        command = mock_execute.await_args.args[2]
+        call = mock_execute.await_args
+        assert call is not None
+        command = call.args[2]
         assert command == {
             "CustomPlay": {
                 "persistentMapId": "afb13c1b-b557-4a11-84a6-5bfaef90304e",

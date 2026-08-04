@@ -4,8 +4,8 @@ import asyncio
 import json
 import logging
 import time
-from datetime import datetime, timedelta
-from typing import Any, Optional, cast
+from datetime import UTC, datetime, timedelta
+from typing import Any, cast
 
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import (
@@ -133,8 +133,8 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
         self.hass = hass
         self.api = client
         self.platforms: list[str] = []
-        self.renew_task: Optional[asyncio.Task] = None
-        self.listen_task: Optional[asyncio.Task] = None
+        self.renew_task: asyncio.Task | None = None
+        self.listen_task: asyncio.Task | None = None
         self.renew_interval = renew_interval
         self._deferred_tasks: set = set()  # Track deferred update tasks
         self._deferred_tasks_by_appliance: dict[str, asyncio.Task] = (
@@ -156,7 +156,7 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
         self._sse_data_received_since_connect = (
             False  # Track if data arrived on current connection
         )
-        self._sse_stall_monitor_task: Optional[asyncio.Task] = None
+        self._sse_stall_monitor_task: asyncio.Task | None = None
         self._consecutive_sse_restarts = (
             0  # Track consecutive watchdog restarts for backoff
         )
@@ -168,7 +168,7 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
         self._last_time_to_end_seen: dict[str, float] = (
             {}
         )  # Track when timeToEnd was last refreshed (SSE or REST) per appliance (#104)
-        self._time_to_end_monitor_task: Optional[asyncio.Task] = None
+        self._time_to_end_monitor_task: asyncio.Task | None = None
         self._consecutive_auth_failures = (
             0  # Track consecutive auth failures before creating repair
         )
@@ -180,9 +180,9 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
         self._pending_capability_retry: set[str] = (
             set()
         )  # Appliances that need capability re-fetch (initial fetch failed)
-        self._capability_retry_task: Optional[asyncio.Task] = None
+        self._capability_retry_task: asyncio.Task | None = None
         self._last_sse_resync_time = 0.0
-        self._pending_sse_resync_task: Optional[asyncio.Task] = None
+        self._pending_sse_resync_task: asyncio.Task | None = None
         self._last_remote_control: dict[str, str] = (
             {}
         )  # Track remoteControl state per appliance to detect panel interactions
@@ -243,7 +243,7 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
             access_token: str, refresh_token: str, api_key: str, expires_at: int
         ) -> None:
             """Callback to update config entry with refreshed tokens and expiration."""
-            expiry_time = datetime.fromtimestamp(expires_at)
+            expiry_time = datetime.fromtimestamp(expires_at, tz=UTC)
             time_until_expiry = expires_at - int(time.time())
 
             _LOGGER.debug(
@@ -356,7 +356,7 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
         except asyncio.CancelledError:
             # Always re-raise cancellation
             raise
-        except (ConnectionError, TimeoutError, asyncio.TimeoutError) as ex:
+        except (ConnectionError, TimeoutError) as ex:
             # Network errors during background task — log and return (not UpdateFailed)
             _LOGGER.error(
                 f"Network error during deferred update for {appliance_id}: {ex}"
@@ -366,7 +366,7 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
             # Data validation errors during background task — log and return
             _LOGGER.error(f"Data error during deferred update for {appliance_id}: {ex}")
             return
-        except Exception:  # noqa: BLE001
+        except Exception:
             # Catch-all for unexpected errors in background task
             _LOGGER.exception(
                 f"Unexpected error during deferred update for {appliance_id}"
@@ -656,12 +656,11 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
     def _should_defer_update(self, appliance_data: dict[str, Any]) -> bool:
         """Return True if any time entity value is at threshold."""
         for key, value in appliance_data.items():
-            if key in TIME_ENTITIES_TO_UPDATE:
-                if (
-                    value is not None
-                    and TIME_ENTITY_THRESHOLD_LOW < value <= TIME_ENTITY_THRESHOLD_HIGH
-                ):
-                    return True
+            if key in TIME_ENTITIES_TO_UPDATE and (
+                value is not None
+                and TIME_ENTITY_THRESHOLD_LOW < value <= TIME_ENTITY_THRESHOLD_HIGH
+            ):
+                return True
         return False
 
     def _schedule_deferred_update(self, appliance_id: str) -> None:
@@ -1145,7 +1144,7 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
                             await asyncio.wait_for(
                                 token_manager.refresh_token(), timeout=30.0
                             )
-                        except asyncio.TimeoutError:
+                        except TimeoutError:
                             _LOGGER.warning(
                                 "Token refresh timed out before websocket renewal"
                             )
@@ -1168,7 +1167,7 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
                         self.listen_websocket(), timeout=UPDATE_TIMEOUT
                     )
                     consecutive_failures = 0  # Reset on success
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     _LOGGER.warning("Timeout during websocket renewal")
                     consecutive_failures += 1
                 except Exception as ex:
@@ -1199,7 +1198,7 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
             self.renew_task.cancel()
             try:
                 await asyncio.wait_for(self.renew_task, timeout=TASK_CANCEL_TIMEOUT)
-            except asyncio.CancelledError, asyncio.TimeoutError:
+            except TimeoutError, asyncio.CancelledError:
                 _LOGGER.debug("Electrolux renewal task cancelled/timeout during close")
 
         # Cancel the SSE listen task
@@ -1207,7 +1206,7 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
             self.listen_task.cancel()
             try:
                 await asyncio.wait_for(self.listen_task, timeout=TASK_CANCEL_TIMEOUT)
-            except asyncio.CancelledError, asyncio.TimeoutError:
+            except TimeoutError, asyncio.CancelledError:
                 _LOGGER.debug("SSE listen task cancelled/timeout during close")
 
         # Cancel all deferred tasks.
@@ -1253,7 +1252,7 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
         # Close API connection - util.py handles SSE stream cleanup
         try:
             await asyncio.wait_for(self.api.close(), timeout=API_DISCONNECT_TIMEOUT)
-        except (asyncio.TimeoutError, Exception) as ex:
+        except (TimeoutError, Exception) as ex:
             if isinstance(ex, asyncio.TimeoutError):
                 _LOGGER.debug("Electrolux API close timeout")
             else:
@@ -1292,7 +1291,7 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
                     asyncio.gather(*appliance_tasks, return_exceptions=True),
                     timeout=30.0,  # Total timeout for all appliances
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 _LOGGER.warning(
                     "Timeout setting up appliances, cancelling pending tasks"
                 )
@@ -1360,7 +1359,7 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
                     appliance_id,
                     elapsed,
                 )
-            except (ConnectionError, TimeoutError, asyncio.TimeoutError) as ex:
+            except (ConnectionError, TimeoutError) as ex:
                 # Enhanced diagnostic logging for network issues
                 elapsed = self.hass.loop.time() - start_time
                 error_type = type(ex).__name__
@@ -1657,7 +1656,7 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
                         create_ex,
                     )
 
-        except (ConnectionError, TimeoutError, asyncio.TimeoutError) as ex:
+        except (ConnectionError, TimeoutError) as ex:
             # Network error during object creation or setup() call
             # Create minimal appliance entry to prevent loss
             error_type = type(ex).__name__
@@ -1912,7 +1911,7 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
                 raise result
             elif isinstance(result, Exception):
                 # Capture the actual exception message
-                other_errors.append(f"{app_id}: {type(result).__name__}: {str(result)}")
+                other_errors.append(f"{app_id}: {type(result).__name__}: {result!s}")
             else:
                 # Fallback for unexpected result types
                 other_errors.append(f"{app_id}: Unexpected result: {result}")
@@ -2418,7 +2417,7 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
                     appliance_id,
                 )
 
-            except asyncio.TimeoutError as timeout_ex:
+            except TimeoutError as timeout_ex:
                 error_msg = f"Manual sync timed out: {timeout_ex}"
                 _LOGGER.error(
                     "Manual sync timeout for appliance %s (%s): %s",

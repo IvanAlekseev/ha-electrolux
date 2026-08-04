@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import time
-from typing import Awaitable, Callable
+from collections.abc import Awaitable, Callable
 
 import jwt
 from electrolux_group_developer_sdk.auth.token_manager import (
@@ -122,7 +122,7 @@ class ElectroluxTokenManager(TokenManager):
         except Exception as e:
             _LOGGER.error(f"[TOKEN-CHECK] Token validation error: {e}")
             _LOGGER.debug(
-                f"[TOKEN-CHECK] Validation exception details: {type(e).__name__}: {str(e)}"
+                f"[TOKEN-CHECK] Validation exception details: {type(e).__name__}: {e!s}"
             )
             return False  # Force refresh if we can't decode JWT
 

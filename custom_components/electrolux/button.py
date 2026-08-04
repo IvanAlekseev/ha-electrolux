@@ -43,7 +43,6 @@ async def async_setup_entry(
                 appliance_id,
             )
             async_add_entities(entities)
-    return
 
 
 class ElectroluxButton(ElectroluxEntity, ButtonEntity):
@@ -224,7 +223,7 @@ class ElectroluxButton(ElectroluxEntity, ButtonEntity):
             coordinator: ElectroluxCoordinator = self.coordinator  # type: ignore[assignment]
             await coordinator.handle_authentication_error(auth_ex)
             return True
-        except Exception:  # noqa: BLE001
+        except Exception:
             # Re-raise any errors from execute_command_with_error_handling
             raise
         _LOGGER.debug("Electrolux send command result %s", result)

@@ -87,7 +87,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _mask_token(refresh_token),
     )
     if token_expires_at:
-        expiry_time = datetime.datetime.fromtimestamp(token_expires_at)
+        expiry_time = datetime.datetime.fromtimestamp(token_expires_at, tz=datetime.UTC)
         time_until_expiry = token_expires_at - time.time()
         _LOGGER.info(
             f"Stored token expiry: {expiry_time.isoformat()} ({time_until_expiry / 3600:.1f} hours from now)"
@@ -166,7 +166,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             timeout=FIRST_REFRESH_TIMEOUT,
         )
         _LOGGER.info("First data refresh completed successfully")
-    except (asyncio.TimeoutError, Exception) as err:
+    except (TimeoutError, Exception) as err:
         # Handle both timeouts and other exceptions gracefully
         _LOGGER.warning(
             "Electrolux first refresh failed or timed out (%s); will retry in background",

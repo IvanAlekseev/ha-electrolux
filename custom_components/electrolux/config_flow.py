@@ -71,9 +71,7 @@ def _validate_credentials(
         if token:
             for char in dangerous_chars:
                 if char in token:
-                    errors.append(
-                        f"{token_name} contains invalid character: {repr(char)}"
-                    )
+                    errors.append(f"{token_name} contains invalid character: {char!r}")
                     break
 
     return errors

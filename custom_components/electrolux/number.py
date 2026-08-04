@@ -119,7 +119,6 @@ async def async_setup_entry(
                 appliance_id,
             )
             async_add_entities(entities)
-    return
 
 
 class ElectroluxNumber(ElectroluxEntity, NumberEntity):
@@ -370,10 +369,7 @@ class ElectroluxNumber(ElectroluxEntity, NumberEntity):
                 return True
 
         # Check for zero step (no adjustment)
-        if program_step is not None and program_step == 0:
-            return True
-
-        return False
+        return bool(program_step is not None and program_step == 0)
 
     def _get_locked_value(self) -> float:
         """Get the locked value for this entity when it's locked by the program.

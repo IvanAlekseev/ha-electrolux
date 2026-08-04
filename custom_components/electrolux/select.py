@@ -53,7 +53,6 @@ async def async_setup_entry(
                 appliance_id,
             )
             async_add_entities(entities)
-    return
 
 
 class ElectroluxSelect(ElectroluxEntity, SelectEntity):
@@ -225,7 +224,7 @@ class ElectroluxSelect(ElectroluxEntity, SelectEntity):
         # All select entities are always available regardless of program support
         return True
 
-    def format_label(self, value: str | int | float | bool | None) -> str | None:
+    def format_label(self, value: str | float | bool | None) -> str | None:
         """Convert input to label string value."""
         if value is None:
             return None
@@ -492,7 +491,7 @@ class ElectroluxSelect(ElectroluxEntity, SelectEntity):
             coordinator: ElectroluxCoordinator = self.coordinator  # type: ignore[assignment]
             await coordinator.handle_authentication_error(auth_ex)
             return  # Explicit return (unreachable but clear)
-        except Exception:  # noqa: BLE001
+        except Exception:
             # Re-raise any errors from execute_command_with_error_handling
             raise
 
@@ -542,25 +541,21 @@ class ElectroluxSelect(ElectroluxEntity, SelectEntity):
 
         # Check for program-specific value constraints
         program_values = self._get_program_constraint("values")
-        if program_values is not None:
-            if isinstance(program_values, list):
-                # Filter options to only include those allowed by the program
-                allowed_values = set(str(v) for v in program_values)
-                all_options = [
-                    label
-                    for label, value in self.options_list.items()
-                    if str(value) in allowed_values
-                ]
-                # Re-add discovered programs filtered out by program constraints
-                # (e.g., GUIDED programs on SO ovens — valid but never enumerated
-                # by the API). They are always selectable once discovered. (#65)
-                if self._discovered_values:
-                    for label, value in self.options_list.items():
-                        if (
-                            value in self._discovered_values
-                            and label not in all_options
-                        ):
-                            all_options.append(label)
+        if program_values is not None and isinstance(program_values, list):
+            # Filter options to only include those allowed by the program
+            allowed_values = {str(v) for v in program_values}
+            all_options = [
+                label
+                for label, value in self.options_list.items()
+                if str(value) in allowed_values
+            ]
+            # Re-add discovered programs filtered out by program constraints
+            # (e.g., GUIDED programs on SO ovens — valid but never enumerated
+            # by the API). They are always selectable once discovered. (#65)
+            if self._discovered_values:
+                for label, value in self.options_list.items():
+                    if value in self._discovered_values and label not in all_options:
+                        all_options.append(label)
 
         # Append the current label if it falls outside the persistent
         # options_list — currently only happens for disabled capability

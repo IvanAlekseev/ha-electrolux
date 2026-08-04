@@ -43,7 +43,6 @@ async def async_setup_entry(
                 appliance_id,
             )
             async_add_entities(entities)
-    return
 
 
 class ElectroluxText(ElectroluxEntity, TextEntity):
@@ -203,6 +202,6 @@ class ElectroluxText(ElectroluxEntity, TextEntity):
             coordinator: ElectroluxCoordinator = self.coordinator  # type: ignore[assignment]
             await coordinator.handle_authentication_error(auth_ex)
             raise
-        except Exception:  # noqa: BLE001
+        except Exception:
             # Re-raise any errors from execute_command_with_error_handling
             raise

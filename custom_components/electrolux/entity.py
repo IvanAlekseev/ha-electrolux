@@ -127,7 +127,7 @@ async def async_setup_entry(
                         _LOGGER.debug(
                             "Could not register suggested id for entity %s", entity
                         )
-            except Exception:  # noqa: BLE001
+            except Exception:
                 _LOGGER.debug(
                     "Entity registry unavailable, skipping suggested id registration"
                 )
@@ -703,7 +703,7 @@ class ElectroluxEntity(CoordinatorEntity):
             appliance = self.get_appliance
             if hasattr(appliance, "data") and appliance.data:
                 caps = appliance.data.capabilities or {}
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
 
         merged: dict[str, Any] = {}
@@ -780,9 +780,9 @@ class ElectroluxEntity(CoordinatorEntity):
         Only unavailable if appliance_status doesn't exist (integration not loaded).
         """
         # Must have appliance status to be available
-        if not hasattr(self, "appliance_status") or self.appliance_status is None:
-            return False
-        return True
+        return not (
+            not hasattr(self, "appliance_status") or self.appliance_status is None
+        )
 
     def is_connected(self) -> bool:
         """Check if the appliance is connected.
@@ -841,10 +841,7 @@ class ElectroluxEntity(CoordinatorEntity):
             if self.entity_source
             else self.entity_attr
         )
-        if "dwyw" in entity_path.lower():
-            return False
-
-        return True
+        return "dwyw" not in entity_path.lower()
 
     # @property
     # def get_entity(self) -> ApplianceEntity:
@@ -885,7 +882,7 @@ class ElectroluxEntity(CoordinatorEntity):
         raw_pnc = self.pnc_id
         # DAM devices have a "1:" prefix e.g. "1:950022200_00:34509998-443E074D965A"
         # Strip it so the rest of the parsing logic is identical
-        effective_pnc = raw_pnc[2:] if raw_pnc.startswith("1:") else raw_pnc
+        effective_pnc = raw_pnc.removeprefix("1:")
         # Split MAC address from device ID on ':'
         pnc_parts = effective_pnc.split(":", 1)
         short_id = pnc_parts[0]
@@ -1106,7 +1103,6 @@ class ElectroluxEntity(CoordinatorEntity):
         The API will return RATE_LIMIT_EXCEEDED errors if commands are sent too quickly.
         With SSE streaming providing instant updates, artificial delays are unnecessary.
         """
-        pass
 
     def _get_program_capabilities(self, current_program: str) -> dict:
         """Get program-specific capabilities from the correct location.

@@ -81,7 +81,6 @@ async def async_setup_entry(
                 appliance_id,
             )
             async_add_entities(filtered)
-    return
 
 
 class ElectroluxSensor(ElectroluxEntity, SensorEntity):

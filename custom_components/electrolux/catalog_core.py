@@ -1,6 +1,6 @@
 """Defined catalog of entities for basic entities (common across all appliance types)."""
 
-from functools import lru_cache
+from functools import cache, lru_cache
 
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass
 from homeassistant.components.sensor import SensorDeviceClass
@@ -15,7 +15,7 @@ from .const import CAPABILITY_READ_STRING
 from .model import ElectroluxDevice
 
 
-@lru_cache(maxsize=None)
+@cache
 def _get_catalog_air_conditioner():
     """Lazy load air conditioner catalog."""
     from .catalogs.catalog_ac import CATALOG_AC
@@ -23,7 +23,7 @@ def _get_catalog_air_conditioner():
     return CATALOG_AC
 
 
-@lru_cache(maxsize=None)
+@cache
 def _get_catalog_dishwasher():
     """Lazy load dishwasher catalog."""
     from .catalogs.catalog_dw import CATALOG_DW
@@ -31,7 +31,7 @@ def _get_catalog_dishwasher():
     return CATALOG_DW
 
 
-@lru_cache(maxsize=None)
+@cache
 def _get_catalog_oven():
     """Lazy load oven catalog."""
     from .catalogs.catalog_ov import CATALOG_OV
@@ -39,7 +39,7 @@ def _get_catalog_oven():
     return CATALOG_OV
 
 
-@lru_cache(maxsize=None)
+@cache
 def _get_catalog_purifier():
     """Lazy load purifier catalog."""
     from .catalogs.catalog_ap import CATALOG_AP
@@ -47,7 +47,7 @@ def _get_catalog_purifier():
     return CATALOG_AP
 
 
-@lru_cache(maxsize=None)
+@cache
 def _get_catalog_refrigerator():
     """Lazy load refrigerator catalog."""
     from .catalogs.catalog_cr import CATALOG_CR
@@ -55,7 +55,7 @@ def _get_catalog_refrigerator():
     return CATALOG_CR
 
 
-@lru_cache(maxsize=None)
+@cache
 def _get_catalog_washer():
     """Lazy load washer catalog."""
     from .catalogs.catalog_wm import CATALOG_WM
@@ -63,7 +63,7 @@ def _get_catalog_washer():
     return CATALOG_WM
 
 
-@lru_cache(maxsize=None)
+@cache
 def _get_catalog_washer_dryer():
     """Lazy load washer dryer catalog."""
     from .catalogs.catalog_wd import CATALOG_WD
@@ -71,7 +71,7 @@ def _get_catalog_washer_dryer():
     return CATALOG_WD
 
 
-@lru_cache(maxsize=None)
+@cache
 def _get_catalog_dryer():
     """Lazy load dryer catalog."""
     from .catalogs.catalog_td import CATALOG_TD
@@ -79,7 +79,7 @@ def _get_catalog_dryer():
     return CATALOG_TD
 
 
-@lru_cache(maxsize=None)
+@cache
 def _get_catalog_structured_oven():
     """Lazy load structured oven catalog."""
     from .catalogs.catalog_so import CATALOG_SO
@@ -87,7 +87,7 @@ def _get_catalog_structured_oven():
     return CATALOG_SO
 
 
-@lru_cache(maxsize=None)
+@cache
 def _get_catalog_dam_ac():
     """Lazy load DAM air conditioner catalog."""
     from .catalogs.catalog_dam_ac import CATALOG_DAM_AC
@@ -95,7 +95,7 @@ def _get_catalog_dam_ac():
     return CATALOG_DAM_AC
 
 
-@lru_cache(maxsize=None)
+@cache
 def _get_catalog_dehumidifier():
     """Lazy load dehumidifier catalog."""
     from .catalogs.catalog_dh import CATALOG_DH
@@ -103,7 +103,7 @@ def _get_catalog_dehumidifier():
     return CATALOG_DH
 
 
-@lru_cache(maxsize=None)
+@cache
 def _get_catalog_rvc():
     """Lazy load robot vacuum catalog."""
     from .catalogs.catalog_rvc import CATALOG_RVC
@@ -111,7 +111,7 @@ def _get_catalog_rvc():
     return CATALOG_RVC
 
 
-@lru_cache(maxsize=None)
+@cache
 def _get_catalog_hob():
     """Lazy load hob catalog."""
     from .catalogs.catalog_hb import CATALOG_HB
@@ -119,7 +119,7 @@ def _get_catalog_hob():
     return CATALOG_HB
 
 
-@lru_cache(maxsize=None)
+@cache
 def _get_catalog_hood():
     """Lazy load hood catalog."""
     from .catalogs.catalog_hd import CATALOG_HD

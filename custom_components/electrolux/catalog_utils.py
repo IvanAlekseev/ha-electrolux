@@ -1,6 +1,6 @@
 """Catalog utility functions for creating common entity patterns."""
 
-from typing import Any, Optional
+from typing import Any
 
 from homeassistant.const import EntityCategory
 
@@ -35,7 +35,7 @@ def create_diagnostic_string_entity(
 def create_diagnostic_number_entity(
     capability_info: dict[str, Any],
     friendly_name: str,
-    unit: Optional[str] = None,
+    unit: str | None = None,
     icon: str = ICON_NUMERIC,
     entity_category: EntityCategory = ENTITY_CATEGORY_DIAGNOSTIC,
 ) -> ElectroluxDevice:

@@ -94,7 +94,6 @@ async def async_setup_entry(
 
             if filtered_switches:
                 async_add_entities(filtered_switches)
-    return
 
 
 class ElectroluxSwitch(ElectroluxEntity, SwitchEntity):
@@ -200,7 +199,7 @@ class ElectroluxSwitch(ElectroluxEntity, SwitchEntity):
             _coordinator: ElectroluxCoordinator = self.coordinator  # type: ignore[assignment]
             await _coordinator.handle_authentication_error(auth_ex)
             raise
-        except Exception:  # noqa: BLE001
+        except Exception:
             # Re-raise any errors from execute_command_with_error_handling
             raise
 

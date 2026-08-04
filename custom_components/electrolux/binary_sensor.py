@@ -96,7 +96,6 @@ async def async_setup_entry(
                 appliance_id,
             )
             async_add_entities(entities)
-    return
 
 
 class ElectroluxBinarySensor(ElectroluxEntity, BinarySensorEntity):
@@ -174,6 +173,6 @@ class ElectroluxBinarySensor(ElectroluxEntity, BinarySensorEntity):
 
         # If we still don't have a value, return False
         if value is None:
-            return False if not self.invert else True
+            return bool(self.invert)
 
         return bool(not value if self.invert else value)

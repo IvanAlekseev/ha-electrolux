@@ -670,12 +670,14 @@ class TestElectroluxVacuumEdgeCases:
         """_send_command re-raises exception when command fails."""
         vacuum = _make_purei9_vacuum()
 
-        with patch(
-            "custom_components.electrolux.vacuum.execute_command_with_error_handling",
-            new=AsyncMock(side_effect=RuntimeError("Command failed")),
+        with (
+            patch(
+                "custom_components.electrolux.vacuum.execute_command_with_error_handling",
+                new=AsyncMock(side_effect=RuntimeError("Command failed")),
+            ),
+            pytest.raises(RuntimeError, match="Command failed"),
         ):
-            with pytest.raises(RuntimeError, match="Command failed"):
-                await vacuum._send_command("powerMode", 3)
+            await vacuum._send_command("powerMode", 3)
 
     def test_battery_level_handles_float_conversion_error(self):
         """battery_level handles ValueError when converting to float."""
@@ -796,17 +798,19 @@ class TestElectroluxVacuumZoneCleaning:
             return_value={"access": "readwrite"}
         )
 
-        with patch(
-            "custom_components.electrolux.vacuum.execute_command_with_error_handling",
-            new=AsyncMock(side_effect=Exception("appliance rejected")),
+        with (
+            patch(
+                "custom_components.electrolux.vacuum.execute_command_with_error_handling",
+                new=AsyncMock(side_effect=Exception("appliance rejected")),
+            ),
+            pytest.raises(Exception, match="appliance rejected"),
         ):
-            with pytest.raises(Exception, match="appliance rejected"):
-                await vacuum.async_clean_zones(
-                    persistent_map_id="afb13c1b-b557-4a11-84a6-5bfaef90304e",
-                    zones=[
-                        {
-                            "zone_id": "9082f714-bdba-4f3a-892f-46b2ff2e07de",
-                            "power_mode": 1,
-                        }
-                    ],
-                )
+            await vacuum.async_clean_zones(
+                persistent_map_id="afb13c1b-b557-4a11-84a6-5bfaef90304e",
+                zones=[
+                    {
+                        "zone_id": "9082f714-bdba-4f3a-892f-46b2ff2e07de",
+                        "power_mode": 1,
+                    }
+                ],
+            )

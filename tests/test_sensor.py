@@ -1,5 +1,6 @@
 """Tests for the Electrolux sensor platform."""
 
+from typing import Any, ClassVar
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -900,7 +901,7 @@ class TestRvcMapZoneSensors:
         )
         assert entity.native_value is None
 
-    ZONE_STATUS = [
+    ZONE_STATUS: ClassVar[list[dict[str, Any]]] = [
         {"id": "z1", "status": "finished", "powerMode": 1},
         {"id": "z2", "status": "finished", "powerMode": 1},
         {"id": "z3", "status": "terminated", "powerMode": 1},

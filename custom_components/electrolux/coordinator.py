@@ -1350,7 +1350,9 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
             # Wait for info and state (required), capabilities optional
             try:
                 appliance_infos, appliance_state = await asyncio.gather(
-                    info_task, state_task
+                    info_task,
+                    state_task,
+                    return_exceptions=False,
                 )
 
                 elapsed = self.hass.loop.time() - start_time

@@ -401,16 +401,15 @@ def map_command_error_to_home_assistant_error(
     try:
         # Extract status code first
         status_code = getattr(ex, "status", None)
-        if not status_code and hasattr(ex, "response"):
-            response = ex.response
+        response = getattr(ex, "response", None)
+        if not status_code and response is not None:
             status_code = getattr(response, "status", None)
-        if not status_code and hasattr(ex, "status_code"):
-            status_code = ex.status_code
+        if not status_code:
+            status_code = getattr(ex, "status_code", None)
 
         # Check if exception has response data
-        if hasattr(ex, "response") and getattr(ex, "response", None):
-            response = ex.response
-            if hasattr(response, "json") and callable(getattr(response, "json", None)):
+        if response is not None:
+            if callable(getattr(response, "json", None)):
                 try:
                     error_data = response.json()
                 except Exception:
@@ -420,11 +419,10 @@ def map_command_error_to_home_assistant_error(
                     error_data = json.loads(response.text)
                 except Exception:
                     pass  # Text parsing failed, continue without error data
-        # Check if exception has direct error data
-        elif hasattr(ex, "error_data"):
-            error_data = ex.error_data
-        elif hasattr(ex, "details"):
-            error_data = ex.details
+        else:
+            error_data = getattr(ex, "error_data", None)
+            if error_data is None:
+                error_data = getattr(ex, "details", None)
 
         # If no structured data found, try parsing the exception message string
         if not error_data:

@@ -904,14 +904,14 @@ class TestSelectAsyncSelectOptionAdvanced:
             "userSelections": {},
         }
 
-        with patch(
-            "custom_components.electrolux.select.format_command_for_appliance",
-            return_value="OPTION1",
+        with (
+            patch(
+                "custom_components.electrolux.select.format_command_for_appliance",
+                return_value="OPTION1",
+            ),
+            pytest.raises(HomeAssistantError, match="appliance state is incomplete"),
         ):
-            with pytest.raises(
-                HomeAssistantError, match="appliance state is incomplete"
-            ):
-                await entity.async_select_option("Option 1")
+            await entity.async_select_option("Option 1")
 
     @pytest.mark.asyncio
     async def test_dam_no_source_program_entity_attr(
@@ -1019,15 +1019,17 @@ class TestSelectAsyncSelectOptionAdvanced:
         mock_coordinator.handle_authentication_error = AsyncMock()
         auth_ex = AuthenticationError("token expired")
 
-        with patch(
-            "custom_components.electrolux.select.execute_command_with_error_handling",
-            side_effect=auth_ex,
-        ):
-            with patch(
+        with (
+            patch(
+                "custom_components.electrolux.select.execute_command_with_error_handling",
+                side_effect=auth_ex,
+            ),
+            patch(
                 "custom_components.electrolux.select.format_command_for_appliance",
                 return_value="OPTION1",
-            ):
-                await entity.async_select_option("Option 1")
+            ),
+        ):
+            await entity.async_select_option("Option 1")
 
         mock_coordinator.handle_authentication_error.assert_called_once_with(auth_ex)
 
@@ -1246,16 +1248,18 @@ class TestSelectMissingCoveragePaths:
         }
 
         generic_err = HomeAssistantError("remote control disabled")
-        with patch(
-            "custom_components.electrolux.select.execute_command_with_error_handling",
-            side_effect=generic_err,
-        ):
-            with patch(
+        with (
+            patch(
+                "custom_components.electrolux.select.execute_command_with_error_handling",
+                side_effect=generic_err,
+            ),
+            patch(
                 "custom_components.electrolux.select.format_command_for_appliance",
                 return_value="OPTION1",
-            ):
-                with pytest.raises(HomeAssistantError, match="remote control disabled"):
-                    await entity.async_select_option("Option 1")
+            ),
+            pytest.raises(HomeAssistantError, match="remote control disabled"),
+        ):
+            await entity.async_select_option("Option 1")
 
     def test_handle_coordinator_update_calls_super(self, mock_coordinator):
         """Test _handle_coordinator_update calls super()._handle_coordinator_update (line 340)."""
@@ -1285,9 +1289,11 @@ class TestSelectMissingCoveragePaths:
 
         # Call _handle_coordinator_update - it calls super()._handle_coordinator_update()
         # which reads from coordinator data. We just need to call it without error.
-        write_mock = MagicMock()
-        setattr(entity, "async_write_ha_state", write_mock)
-        entity._handle_coordinator_update()
+        with patch(
+            "homeassistant.helpers.entity.Entity.async_write_ha_state"
+        ) as write_mock:
+            entity._handle_coordinator_update()
+            write_mock.assert_called_once()
         # If we got here without error, super() was called successfully
 
 

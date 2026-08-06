@@ -9,3 +9,4 @@ __pycache__/
 *.log
 *diag-sample.json*
 *translate.py*
+*claude*

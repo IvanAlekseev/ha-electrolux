@@ -15,7 +15,6 @@ test = [
     "electrolux-group-developer-sdk",
     "mypy>=2.3.0",
     "ruff>=0.16.1",
-    "black>=25.0.0",
 ]
 dev = [
     "aiohttp>=3.14.3,<4.0.0",
@@ -25,38 +24,6 @@ dev = [
     "pre-commit",
 ]
 
-[tool.black]
-target-version = ["py314"]
-line-length = 88
-
-[tool.ruff.lint]
-# ruff 0.16 enables many new rules by default; ignore those that conflict with
-# project conventions (broad-except resilience, explicit style choices).
-ignore = [
-    "BLE001",  # blind-except – HA integrations catch Exception for resilience
-    "G201",    # logging-exc-lowercase – consistent f-string log formatting
-    "S110",    # try-except-pass – acceptable when failure is non-critical
-    "SIM102",  # collapsible-if – separate ifs are often more readable
-    "SIM103",  # needless-bool – explicit return style preferred
-    "SIM118",  # in-dict-keys – explicit .keys() is intentional
-    "TRY203",  # useless-try – acceptable defensive structure
-    "TRY401",  # verbose-log-message – logging style preserved
-    "UP033",   # lru-cache-with-maxsize-none – explicit maxsize=None is clearer
-    "UP041",   # timeout-error-alias – asyncio.TimeoutError is explicit
-]
-
-[tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = [
-    "SIM117",  # nested-with – common pattern in test fixtures
-    "TRY002",  # custom-exception – tests raise built-in exceptions freely
-    "B010",    # setattr-in-tests – test convenience
-    "BLE001",  # blind-except – tests catch Exception for assertion
-    "S110",    # try-except-pass – tests intentionally swallow
-    "B017",    # assert-raises-exception – pytest.raises(Exception) is standard
-    "RUF059",  # unused-unpacked-variable – test convenience
-    "RUF012",  # mutable-class-default – test fixtures use class-level lists
-]
-
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
@@ -64,3 +31,14 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "--strict-markers"
+
+[tool.ruff.lint]
+ignore = [
+    "BLE001",
+    "G201",
+    "S110",
+    "SIM102",
+    "SIM103",
+    "TRY203",
+    "TRY401",
+]

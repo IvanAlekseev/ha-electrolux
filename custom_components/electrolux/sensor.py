@@ -17,16 +17,6 @@ from .util import create_notification, get_capability, time_seconds_to_minutes
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 PARALLEL_UPDATES = 0
 
-FRIENDLY_NAMES = {
-    "ovwater_tank_empty": "Water Tank Status",
-    "foodProbeInsertionState": "Food Probe",
-    "ovcleaning_ended": "Cleaning Status",
-    "ovfood_probe_end_of_cooking": "Probe End of Cooking",
-    "connectivityState": "Connectivity State",
-    "executionState": "Execution State",
-    "applianceState": "Appliance State",
-}
-
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -89,18 +79,6 @@ class ElectroluxSensor(ElectroluxEntity, SensorEntity):
     def entity_domain(self) -> str:
         """Entity domain for the entry. Used for consistent entity_id."""
         return SENSOR
-
-    @property
-    def name(self) -> str:
-        """Return the name of the sensor."""
-        # Check for friendly name first using entity_name
-        friendly_name = FRIENDLY_NAMES.get(self.entity_name)
-        if friendly_name:
-            return friendly_name
-        # Fall back to catalog entry friendly name
-        if self.catalog_entry and self.catalog_entry.friendly_name:
-            return self.catalog_entry.friendly_name.capitalize()
-        return self._name
 
     @property
     def suggested_display_precision(self) -> int | None:
@@ -342,13 +320,16 @@ class ElectroluxSensor(ElectroluxEntity, SensorEntity):
                             severity = alert.get("severity", "Alert")
                             status = alert.get("acknowledgeStatus", "")
                             alert_types[name] = f"{severity}-{status}"
+                            title = (
+                                self.name if isinstance(self.name, str) else self._name
+                            )
                             create_notification(
                                 self.hass,
                                 self.config_entry,
                                 alert_name=name,
                                 alert_severity=severity,
                                 alert_status=status,
-                                title=self.name,
+                                title=title,
                             )
             return alert_types
         return {}

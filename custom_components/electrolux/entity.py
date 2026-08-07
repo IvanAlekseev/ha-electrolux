@@ -176,6 +176,7 @@ class ElectroluxEntity(CoordinatorEntity):
                     self.appliance_status = appliance.state
 
         self._name = name
+        self._attr_name = name
         self._icon = icon
         self._device_class = device_class
         self._entity_category = entity_category
@@ -764,13 +765,6 @@ class ElectroluxEntity(CoordinatorEntity):
     def is_dam_appliance(self) -> bool:
         """Return True if this is a DAM (One Connected Platform) appliance."""
         return self.pnc_id.startswith("1:")
-
-    @property
-    def name(self) -> str:
-        """Return the name of the sensor."""
-        if self.catalog_entry and self.catalog_entry.friendly_name:
-            return self.catalog_entry.friendly_name.capitalize()
-        return self._name
 
     @property
     def available(self) -> bool:

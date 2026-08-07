@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import pytest
 import voluptuous as vol
 from homeassistant.helpers import config_validation as cv
@@ -20,12 +22,15 @@ def test_zone_cleaning_schema_is_an_entity_service_schema():
 
 def test_zone_cleaning_schema_accepts_a_target():
     """The schema must accept the entity target the service is called with."""
-    data = SERVICE_START_ZONE_CLEANING_SCHEMA(
-        {
-            "entity_id": "vacuum.robot",
-            "persistent_map_id": "map-1",
-            "zones": [{"zone_id": "zone-1", "power_mode": 2}],
-        }
+    data = cast(
+        dict[str, Any],
+        SERVICE_START_ZONE_CLEANING_SCHEMA(
+            {
+                "entity_id": "vacuum.robot",
+                "persistent_map_id": "map-1",
+                "zones": [{"zone_id": "zone-1", "power_mode": 2}],
+            }
+        ),
     )
     assert data["persistent_map_id"] == "map-1"
     assert data["zones"][0]["zone_id"] == "zone-1"

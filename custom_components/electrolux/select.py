@@ -135,7 +135,9 @@ class ElectroluxSelect(ElectroluxEntity, SelectEntity):
             return None
         try:
             key = f"{DISCOVERED_PROGRAMS_KEY}_{self.unique_id}".replace("/", "_")
-        except (TypeError, AttributeError):
+        except TypeError:
+            return None
+        except AttributeError:
             return None
         return Store(self.hass, STORAGE_VERSION, key)
 

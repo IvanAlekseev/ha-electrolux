@@ -64,6 +64,7 @@ STATE_CHANGE_REFRESH_DELAY = (
 )
 CLEANUP_INTERVAL = 3600  # 1 hour in seconds (reduced from 24h for better UX)
 TASK_CANCEL_TIMEOUT = 2.0  # seconds for task cancellation timeouts
+TASK_CANCEL_EXCEPTIONS = (TimeoutError, asyncio.CancelledError)
 WEBSOCKET_DISCONNECT_TIMEOUT = 5.0  # seconds for websocket disconnect
 WEBSOCKET_BACKOFF_DELAY = 300  # 5 minutes in seconds for backoff
 API_DISCONNECT_TIMEOUT = 3.0  # seconds for API disconnect
@@ -1188,7 +1189,7 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
             self.renew_task.cancel()
             try:
                 await asyncio.wait_for(self.renew_task, timeout=TASK_CANCEL_TIMEOUT)
-            except (TimeoutError, asyncio.CancelledError):
+            except TASK_CANCEL_EXCEPTIONS:
                 _LOGGER.debug("Electrolux renewal task cancelled/timeout during close")
 
         # Cancel the SSE listen task
@@ -1196,7 +1197,7 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
             self.listen_task.cancel()
             try:
                 await asyncio.wait_for(self.listen_task, timeout=TASK_CANCEL_TIMEOUT)
-            except (TimeoutError, asyncio.CancelledError):
+            except TASK_CANCEL_EXCEPTIONS:
                 _LOGGER.debug("SSE listen task cancelled/timeout during close")
 
         # Cancel all deferred tasks.

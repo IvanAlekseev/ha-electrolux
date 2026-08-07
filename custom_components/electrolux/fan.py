@@ -202,7 +202,9 @@ class ElectroluxFan(ElectroluxEntity, FanEntity):
                     if caps:
                         return caps.get(attr_name)
 
-        except (KeyError, AttributeError):
+        except KeyError:
+            pass
+        except AttributeError:
             pass
         return None
 

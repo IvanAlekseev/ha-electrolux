@@ -436,7 +436,7 @@ class ElectroluxVacuum(ElectroluxEntity, StateVacuumEntity):
                     pm_min = int(cap.get("min", 1))
                     pm_max = int(cap.get("max", 3))
                     return pm_min, pm_max
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             _LOGGER.debug(
                 "Could not read powerMode capability for %s, using default range",
                 self.pnc_id,

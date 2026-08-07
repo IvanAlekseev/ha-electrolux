@@ -247,10 +247,7 @@ class ElectroluxVacuum(ElectroluxEntity, StateVacuumEntity):
         """
         if not self._is_purei9:
             return False
-        return (
-            self.get_state_attr("ecoMode") is not None
-            and self.get_state_attr("powerMode") is None
-        )
+        return self.get_state_attr("ecoMode") is not None and self.get_state_attr("powerMode") is None
 
     # ── Entity metadata ───────────────────────────────────────────────────────
 
@@ -355,12 +352,8 @@ class ElectroluxVacuum(ElectroluxEntity, StateVacuumEntity):
             if battery_max == 100 and battery_min in (0, 1):
                 return round(battery_value)
 
-            battery_value = max(
-                float(battery_min), min(float(battery_max), battery_value)
-            )
-            percentage = (
-                (battery_value - battery_min) / (battery_max - battery_min)
-            ) * 100
+            battery_value = max(float(battery_min), min(float(battery_max), battery_value))
+            percentage = ((battery_value - battery_min) / (battery_max - battery_min)) * 100
             return round(max(0.0, min(100.0, percentage)))
         return None
 
@@ -428,11 +421,7 @@ class ElectroluxVacuum(ElectroluxEntity, StateVacuumEntity):
             return _PUREI9_GEN1_FAN_SPEEDS
 
         pm_min, pm_max = self._purei9_power_mode_range()
-        return [
-            _PUREI9_INT_TO_SPEED[i]
-            for i in range(pm_min, pm_max + 1)
-            if i in _PUREI9_INT_TO_SPEED
-        ]
+        return [_PUREI9_INT_TO_SPEED[i] for i in range(pm_min, pm_max + 1) if i in _PUREI9_INT_TO_SPEED]
 
     def _purei9_power_mode_range(self) -> tuple[int, int]:
         """Return the (min, max) powerMode range from device capabilities.
@@ -447,7 +436,7 @@ class ElectroluxVacuum(ElectroluxEntity, StateVacuumEntity):
                     pm_min = int(cap.get("min", 1))
                     pm_max = int(cap.get("max", 3))
                     return pm_min, pm_max
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             _LOGGER.debug(
                 "Could not read powerMode capability for %s, using default range",
                 self.pnc_id,
@@ -599,9 +588,7 @@ class ElectroluxVacuum(ElectroluxEntity, StateVacuumEntity):
         _LOGGER.debug("Electrolux vacuum command: %s", command)
 
         try:
-            await execute_command_with_error_handling(
-                client, self.pnc_id, command, attr, _LOGGER, self.capability
-            )
+            await execute_command_with_error_handling(client, self.pnc_id, command, attr, _LOGGER, self.capability)
             self._apply_optimistic_update(attr, value)
         except Exception as ex:
             _LOGGER.error("Electrolux vacuum command failed for %s: %s", attr, ex)

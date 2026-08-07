@@ -28,12 +28,7 @@ class ElectroluxDevice:
     # type used here will override internal definitions / guesstimates
     # entity_platform will override the device_class specified
     device_class: (
-        BinarySensorDeviceClass
-        | ButtonDeviceClass
-        | NumberDeviceClass
-        | SensorDeviceClass
-        | SwitchDeviceClass
-        | None
+        BinarySensorDeviceClass | ButtonDeviceClass | NumberDeviceClass | SensorDeviceClass | SwitchDeviceClass | None
     ) = None
 
     # native unit of measurement (matches what the API reports)
@@ -83,12 +78,7 @@ class ElectroluxDevice:
 
     # Device class override paired with reported_only_entity_platform.
     reported_only_device_class: (
-        BinarySensorDeviceClass
-        | ButtonDeviceClass
-        | NumberDeviceClass
-        | SensorDeviceClass
-        | SwitchDeviceClass
-        | None
+        BinarySensorDeviceClass | ButtonDeviceClass | NumberDeviceClass | SensorDeviceClass | SwitchDeviceClass | None
     ) = None
 
     # Custom icons map according to values : useful for execute commands buttons

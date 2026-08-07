@@ -41,9 +41,7 @@ AUTH_ERROR_PHRASES = (
 
 # Wording around an expired token varies ("token expired", "token has
 # expired", "access token is expired"), so match the pair rather than a phrase.
-_EXPIRED_TOKEN = re.compile(
-    r"\btoken\b.{0,24}?\bexpired\b|\bexpired\b.{0,24}?\btoken\b"
-)
+_EXPIRED_TOKEN = re.compile(r"\btoken\b.{0,24}?\bexpired\b|\bexpired\b.{0,24}?\btoken\b")
 
 # aiohttp renders its errors as "<prefix>: 406, message='...', url='...'".
 _STATUS_IN_MESSAGE = re.compile(r"\b(\d{3}),\s*message=")
@@ -70,9 +68,7 @@ def get_error_status(ex: BaseException) -> int | None:
     return None
 
 
-def is_auth_error(
-    ex: BaseException, *, auth_statuses: tuple[int, ...] = AUTH_STATUS_CODES
-) -> bool:
+def is_auth_error(ex: BaseException, *, auth_statuses: tuple[int, ...] = AUTH_STATUS_CODES) -> bool:
     """Return True only for failures that re-authenticating can fix.
 
     A known status decides on its own, so a 406 command validation error, a 429

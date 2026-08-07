@@ -76,11 +76,7 @@ async def async_setup_entry(
     coordinator = entry.runtime_data
     if appliances := coordinator.data.get("appliances", None):
         for appliance_id, appliance in appliances.appliances.items():
-            entities = [
-                entity
-                for entity in appliance.entities
-                if entity.entity_type == BINARY_SENSOR
-            ]
+            entities = [entity for entity in appliance.entities if entity.entity_type == BINARY_SENSOR]
             _LOGGER.debug(
                 "Electrolux add %d BINARY_SENSOR entities to registry for appliance %s",
                 len(entities),

@@ -51,9 +51,7 @@ CATALOG_RVC: dict[str, ElectroluxDevice] = {
         capability_info={
             "access": "read",
             "type": "string",
-            "values": {
-                str(k): {"name": v} for k, v in _PUREI9_ROBOT_STATUS_VALUES.items()
-            },
+            "values": {str(k): {"name": v} for k, v in _PUREI9_ROBOT_STATUS_VALUES.items()},
         },
         device_class=SensorDeviceClass.ENUM,
         unit=None,

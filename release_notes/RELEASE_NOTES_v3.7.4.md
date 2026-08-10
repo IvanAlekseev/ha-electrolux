@@ -50,5 +50,4 @@ Thanks to all contributors who made this release possible:
 - @TTLucian
 - @netflash
 - @tanarchytan
-- @Copilot
 

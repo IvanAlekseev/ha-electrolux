@@ -92,6 +92,8 @@ def coordinator(mock_hass, mock_api):
         coord.last_update_success = True
         coord._last_remote_control = {}
         coord._pending_state_refresh_tasks = {}
+        coord._unsub_refresh = None
+        coord.async_set_updated_data = MagicMock()
         return coord
 
 
@@ -761,3 +763,90 @@ class TestSetupEntities:
 
         with pytest.raises(asyncio.CancelledError):
             await coordinator.setup_entities()
+
+
+# ---------------------------------------------------------------------------
+# Desync recovery: timeToEnd decrement while not in ACTIVE_TIME_TO_END_STATES
+# ---------------------------------------------------------------------------
+
+
+class TestDesyncRecovery:
+    def test_timetoend_decrement_in_ready_to_start_schedules_state_refresh(
+        self, coordinator
+    ):
+        """When timeToEnd decrements while applianceState is READY_TO_START,
+
+        a state-refresh is scheduled to recover from the dropped RUNNING SSE event.
+        """
+        appliance = MagicMock()
+        appliance.get_state.return_value = "READY_TO_START"
+        coordinator._appliances_cache = MagicMock()
+        coordinator._appliances_cache.get_appliance.return_value = appliance
+        coordinator.data = {"appliances": coordinator._appliances_cache}
+        coordinator._schedule_state_refresh = MagicMock()
+        coordinator._last_time_to_end = {"app1": 13500}
+
+        # Incoming SSE event: timeToEnd decrements from 13500 to 13440
+        data = {
+            "applianceId": "app1",
+            "property": "timeToEnd",
+            "value": 13440,
+        }
+        coordinator.incoming_data(data)
+
+        # State refresh must be scheduled immediately
+        coordinator._schedule_state_refresh.assert_called_once_with("app1")
+        assert coordinator._last_time_to_end["app1"] == 13440
+
+    def test_timetoend_static_in_ready_to_start_does_not_schedule_refresh(
+        self, coordinator
+    ):
+        """When timeToEnd is unchanged while in READY_TO_START,
+
+        no state refresh is scheduled (avoids unnecessary API calls while idle).
+        """
+        appliance = MagicMock()
+        appliance.get_state.return_value = "READY_TO_START"
+        coordinator._appliances_cache = MagicMock()
+        coordinator._appliances_cache.get_appliance.return_value = appliance
+        coordinator.data = {"appliances": coordinator._appliances_cache}
+        coordinator._schedule_state_refresh = MagicMock()
+        coordinator._last_time_to_end = {"app1": 13500}
+
+        # Incoming SSE event: same value (e.g. duplicate or idle selection)
+        data = {
+            "applianceId": "app1",
+            "property": "timeToEnd",
+            "value": 13500,
+        }
+        coordinator.incoming_data(data)
+
+        # No state refresh should be scheduled
+        coordinator._schedule_state_refresh.assert_not_called()
+
+    def test_timetoend_decrement_in_running_does_not_schedule_desync_refresh(
+        self, coordinator
+    ):
+        """When timeToEnd decrements while already in RUNNING,
+
+        normal operation applies and desync recovery is not triggered.
+        """
+        appliance = MagicMock()
+        appliance.get_state.return_value = "RUNNING"
+        coordinator._appliances_cache = MagicMock()
+        coordinator._appliances_cache.get_appliance.return_value = appliance
+        coordinator.data = {"appliances": coordinator._appliances_cache}
+        coordinator._schedule_state_refresh = MagicMock()
+        coordinator._last_time_to_end = {"app1": 13500}
+
+        # Incoming SSE event: timeToEnd decrements normally during RUNNING
+        data = {
+            "applianceId": "app1",
+            "property": "timeToEnd",
+            "value": 13440,
+        }
+        coordinator.incoming_data(data)
+
+        # Desync recovery should not trigger because state is already RUNNING
+        coordinator._schedule_state_refresh.assert_not_called()
+        assert coordinator._last_time_to_end["app1"] == 13440

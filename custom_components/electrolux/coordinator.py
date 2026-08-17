@@ -66,7 +66,9 @@ TASK_CANCEL_EXCEPTIONS = (TimeoutError, asyncio.CancelledError)
 WEBSOCKET_DISCONNECT_TIMEOUT = 5.0  # seconds for websocket disconnect
 WEBSOCKET_BACKOFF_DELAY = 300  # 5 minutes in seconds for backoff
 API_DISCONNECT_TIMEOUT = 3.0  # seconds for API disconnect
-SSE_RESTART_COOLDOWN = 900  # 15 minutes: cooldown between SSE restart attempts
+SSE_RESTART_BASE_COOLDOWN = 15.0  # seconds: base cooldown before first SSE restart attempt
+SSE_RESTART_MAX_COOLDOWN = 1800.0  # 30 minutes: maximum exponential backoff cooldown
+SSE_RESTART_COOLDOWN = SSE_RESTART_BASE_COOLDOWN  # backwards compatibility alias
 SSE_STALL_THRESHOLD = 300.0  # seconds without SSE messages before forced reconnect
 SSE_STALL_CHECK_INTERVAL = 60.0  # seconds between watchdog checks
 
@@ -455,6 +457,27 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
                     appliance_id,
                 )
                 self._schedule_deferred_update(appliance_id)
+
+            # Desync recovery: when timeToEnd decrements while the appliance is not in
+            # an active countdown state (e.g. cloud dropped the applianceState=RUNNING event
+            # after user started cycle via App or physical button), trigger state refresh to resync.
+            appliance = appliances.get_appliance(appliance_id)
+            if appliance:
+                current_state = str(appliance.get_state("applianceState") or "").upper().replace(" ", "_")
+                if (
+                    current_state not in ACTIVE_TIME_TO_END_STATES
+                    and old_value is not None
+                    and new_value is not None
+                    and 0 < new_value < old_value
+                ):
+                    _LOGGER.debug(
+                        "timeToEnd decremented (%s → %s) while applianceState=%s for %s — desync detected, scheduling state refresh",
+                        old_value,
+                        new_value,
+                        current_state,
+                        appliance_id,
+                    )
+                    self._schedule_state_refresh(appliance_id)
 
             # Track this value for next comparison
             self._last_time_to_end[appliance_id] = new_value
@@ -1821,12 +1844,16 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
         self._last_sse_restart_log_count += 1
 
         # Log summary every 5 restarts or on the first few to avoid spam
-        backoff_minutes = (SSE_RESTART_COOLDOWN * min(2**self._consecutive_sse_restarts, 8)) / 60
+        backoff_seconds = min(
+            SSE_RESTART_BASE_COOLDOWN * min(2**self._consecutive_sse_restarts, 120),
+            SSE_RESTART_MAX_COOLDOWN,
+        )
+        backoff_desc = f"{int(backoff_seconds)}s" if backoff_seconds < 60 else f"{backoff_seconds / 60:.1f}min"
         if self._last_sse_restart_log_count <= 3 or self._last_sse_restart_log_count % 5 == 0:
             _LOGGER.info(
-                "SSE watchdog initiating stream restart (restart #%d, backoff %.0fmin)",
+                "SSE watchdog initiating stream restart (restart #%d, backoff %s)",
                 self._consecutive_sse_restarts,
-                backoff_minutes,
+                backoff_desc,
             )
         else:
             _LOGGER.debug(
@@ -1920,16 +1947,19 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
         await asyncio.gather(task, return_exceptions=True)
 
     def _can_restart_sse(self) -> bool:
-        """Check if we can restart SSE (debounced with exponential backoff).
+        """Check if we can restart SSE (debounced with progressive exponential backoff).
 
-        Uses exponential backoff based on consecutive restarts to avoid hammering
-        the server when connections are unstable. Base cooldown is 15 minutes,
-        doubling with each consecutive restart up to a maximum of 2 hours.
+        Uses progressive exponential backoff based on consecutive restarts:
+        restarts start fast (15s, 30s, 60s, 120s...) for quick recovery from transient
+        glitches, and scale up to 30 minutes during sustained outages to avoid hammering
+        the server and spamming logs.
         """
         current_time = self.hass.loop.time()
-        # Exponential backoff: 15min, 30min, 1h, 2h (capped)
-        backoff_multiplier = min(2**self._consecutive_sse_restarts, 8)
-        effective_cooldown = SSE_RESTART_COOLDOWN * backoff_multiplier
+        # Progressive backoff: 15s -> 30s -> 1m -> 2m -> 4m -> 8m -> 16m -> 30m (capped)
+        backoff_multiplier = min(2**self._consecutive_sse_restarts, 120)
+        effective_cooldown = min(
+            SSE_RESTART_BASE_COOLDOWN * backoff_multiplier, SSE_RESTART_MAX_COOLDOWN
+        )
 
         if current_time - self._last_sse_restart_time > effective_cooldown:
             self._last_sse_restart_time = current_time

@@ -230,12 +230,26 @@ class TestCanRestartSse:
 
     def test_returns_false_within_cooldown(self, coordinator):
         coordinator.hass.loop.time.return_value = 1000.0
-        coordinator._last_sse_restart_time = 500.0  # 500s ago < 900s cooldown
+        coordinator._consecutive_sse_restarts = 0
+        coordinator._last_sse_restart_time = 995.0  # 5s ago < 15s base cooldown
         assert coordinator._can_restart_sse() is False
 
     def test_returns_true_after_cooldown(self, coordinator):
-        coordinator.hass.loop.time.return_value = 2000.0
-        coordinator._last_sse_restart_time = 0.0  # > 900s ago
+        coordinator.hass.loop.time.return_value = 1000.0
+        coordinator._consecutive_sse_restarts = 0
+        coordinator._last_sse_restart_time = 980.0  # 20s ago > 15s base cooldown
+        assert coordinator._can_restart_sse() is True
+
+    def test_progressive_exponential_backoff(self, coordinator):
+        coordinator._last_sse_restart_time = 1000.0
+        coordinator._consecutive_sse_restarts = 3  # 15s * 2^3 = 120s cooldown
+        
+        # 60s elapsed < 120s cooldown -> False
+        coordinator.hass.loop.time.return_value = 1060.0
+        assert coordinator._can_restart_sse() is False
+
+        # 125s elapsed > 120s cooldown -> True
+        coordinator.hass.loop.time.return_value = 1125.0
         assert coordinator._can_restart_sse() is True
 
 

@@ -219,9 +219,7 @@ class TestElectroluxTokenManager401:
             assert all(results), "All concurrent refresh calls should succeed"
 
             # Should only make ONE actual HTTP request (others wait and skip due to lock)
-            assert (
-                refresh_call_count == 1
-            ), f"Expected 1 HTTP request, got {refresh_call_count}"
+            assert refresh_call_count == 1, f"Expected 1 HTTP request, got {refresh_call_count}"
 
             # Verify tokens were updated
             auth_data = await token_manager.get_auth_data()
@@ -509,7 +507,7 @@ class TestElectroluxTokenManager401:
 
     @pytest.mark.asyncio
     async def test_exponential_backoff_on_repeated_failures(self):
-        """Test that consecutive failures trigger exponential backoff (60→120→240→300s max)."""
+        """Test that consecutive failures trigger progressive exponential backoff (15→30→60→120→240→300s)."""
         fixed_time = 1000000000
         expired_time = fixed_time - 3600
         mock_expired_jwt = {"exp": expired_time, "sub": "test_user"}
@@ -546,43 +544,71 @@ class TestElectroluxTokenManager401:
                 "custom_components.electrolux.token_manager.time.time",
                 side_effect=mock_time,
             ),
+            patch(
+                "custom_components.electrolux.token_manager.random.uniform",
+                return_value=1.0,
+            ),
         ):
-            # First failure: cooldown = 60s
+            # First failure: cooldown = 15s
             result1 = await token_manager.refresh_token()
             assert result1 is False
             assert token_manager._consecutive_failures == 1
+            assert token_manager._current_backoff == 15.0
             assert refresh_attempts == 1
 
-            # Advance time by 61 seconds (past first cooldown)
-            current_time += 61
+            # Advance time by 16 seconds (past first cooldown)
+            current_time += 16
 
-            # Second failure: cooldown = 120s
+            # Second failure: cooldown = 30s
             result2 = await token_manager.refresh_token()
             assert result2 is False
             assert token_manager._consecutive_failures == 2
+            assert token_manager._current_backoff == 30.0
             assert refresh_attempts == 2
 
-            # Advance time by 121 seconds (past second cooldown)
-            current_time += 121
+            # Advance time by 31 seconds (past second cooldown)
+            current_time += 31
 
-            # Third failure: cooldown = 240s
+            # Third failure: cooldown = 60s
             result3 = await token_manager.refresh_token()
             assert result3 is False
             assert token_manager._consecutive_failures == 3
+            assert token_manager._current_backoff == 60.0
             assert refresh_attempts == 3
 
-            # Advance time by 241 seconds (past third cooldown)
-            current_time += 241
+            # Advance time by 61 seconds (past third cooldown)
+            current_time += 61
 
-            # Fourth failure: cooldown = 300s (capped at max)
+            # Fourth failure: cooldown = 120s
             result4 = await token_manager.refresh_token()
             assert result4 is False
             assert token_manager._consecutive_failures == 4
+            assert token_manager._current_backoff == 120.0
             assert refresh_attempts == 4
 
+            # Advance time by 121 seconds (past fourth cooldown)
+            current_time += 121
+
+            # Fifth failure: cooldown = 240s
+            result5 = await token_manager.refresh_token()
+            assert result5 is False
+            assert token_manager._consecutive_failures == 5
+            assert token_manager._current_backoff == 240.0
+            assert refresh_attempts == 5
+
+            # Advance time by 241 seconds (past fifth cooldown)
+            current_time += 241
+
+            # Sixth failure: cooldown = 300s (capped at max)
+            result6 = await token_manager.refresh_token()
+            assert result6 is False
+            assert token_manager._consecutive_failures == 6
+            assert token_manager._current_backoff == 300.0
+            assert refresh_attempts == 6
+
     @pytest.mark.asyncio
-    async def test_cooldown_bypass_when_token_expired(self):
-        """Test that _marked_needs_refresh bypasses cooldown for expired tokens."""
+    async def test_expired_token_strictly_respects_backoff_cooldown(self):
+        """Test that expired tokens strictly respect backoff cooldown and do not spam refresh requests."""
         fixed_time = 1000000000
         expired_time = fixed_time - 3600  # Expired 1 hour ago
         mock_expired_jwt = {"exp": expired_time, "sub": "test_user"}
@@ -601,6 +627,11 @@ class TestElectroluxTokenManager401:
             refresh_attempts += 1
             raise mock_exception
 
+        current_time = fixed_time
+
+        def mock_time():
+            return current_time
+
         with (
             patch(
                 "custom_components.electrolux.token_manager.jwt.decode",
@@ -612,25 +643,133 @@ class TestElectroluxTokenManager401:
             ),
             patch(
                 "custom_components.electrolux.token_manager.time.time",
-                return_value=fixed_time,
+                side_effect=mock_time,
+            ),
+            patch(
+                "custom_components.electrolux.token_manager.random.uniform",
+                return_value=1.0,
             ),
         ):
-            # First refresh fails, setting cooldown
+            # First refresh fails, setting 15s cooldown
             result1 = await token_manager.refresh_token()
             assert result1 is False
             assert refresh_attempts == 1
+            assert token_manager._current_backoff == 15.0
 
-            # is_token_valid marks token as needing refresh
+            # is_token_valid returns False (token is expired)
             is_valid = token_manager.is_token_valid()
             assert is_valid is False
-            assert token_manager._marked_needs_refresh is True
 
-            # Second refresh should bypass cooldown due to _marked_needs_refresh
+            # Immediate second refresh MUST be blocked by cooldown
             result2 = await token_manager.refresh_token()
             assert result2 is False
-            assert (
-                refresh_attempts == 2
-            ), "Cooldown should be bypassed when token expired"
+            assert refresh_attempts == 1, "Immediate refresh must be blocked by cooldown"
+
+            # Advance time by 5s (< 15s cooldown) -> still blocked
+            current_time += 5
+            result3 = await token_manager.refresh_token()
+            assert result3 is False
+            assert refresh_attempts == 1, "Refresh within cooldown must be blocked"
+
+            # Advance time past 15s cooldown -> retry allowed
+            current_time += 11
+            result4 = await token_manager.refresh_token()
+            assert result4 is False
+            assert refresh_attempts == 2, "Refresh after cooldown expired should be attempted"
+
+    @pytest.mark.asyncio
+    async def test_token_refresh_429_classified_as_transient(self):
+        """Test that HTTP 429 Too Many Requests is classified as transient (does not trigger reauth latch)."""
+        fixed_time = 1000000000
+        token_manager = ElectroluxTokenManager(
+            access_token="test_access",
+            refresh_token="test_refresh",
+            api_key="test_api_key",
+        )
+        mock_auth_cb = AsyncMock()
+        token_manager.set_auth_error_callback(mock_auth_cb)
+
+        with (
+            patch.object(token_manager, "is_token_valid", return_value=False),
+            patch(
+                "custom_components.electrolux.token_manager.request",
+                side_effect=Exception(
+                    "ClientResponseError: 429, message='', url='https://api.developer.electrolux.one/api/v1/token/refresh'"
+                ),
+            ),
+            patch(
+                "custom_components.electrolux.token_manager.time.time",
+                return_value=fixed_time,
+            ),
+            patch(
+                "custom_components.electrolux.token_manager.random.uniform",
+                return_value=1.0,
+            ),
+        ):
+            result = await token_manager.refresh_token()
+            assert result is False
+            assert token_manager._permanent_auth_failure is False
+            assert token_manager._consecutive_failures == 1
+            assert token_manager._current_backoff == 15.0
+            mock_auth_cb.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_token_refresh_503_classified_as_transient(self):
+        """Test that HTTP 503 Service Unavailable is classified as transient."""
+        fixed_time = 1000000000
+        token_manager = ElectroluxTokenManager(
+            access_token="test_access",
+            refresh_token="test_refresh",
+            api_key="test_api_key",
+        )
+        mock_auth_cb = AsyncMock()
+        token_manager.set_auth_error_callback(mock_auth_cb)
+
+        with (
+            patch.object(token_manager, "is_token_valid", return_value=False),
+            patch(
+                "custom_components.electrolux.token_manager.request",
+                side_effect=Exception("503 Service Temporarily Unavailable"),
+            ),
+            patch(
+                "custom_components.electrolux.token_manager.time.time",
+                return_value=fixed_time,
+            ),
+        ):
+            result = await token_manager.refresh_token()
+            assert result is False
+            assert token_manager._permanent_auth_failure is False
+            assert token_manager._consecutive_failures == 1
+            mock_auth_cb.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_token_refresh_permanent_401_triggers_auth_latch(self):
+        """Test that 401 Unauthorized triggers permanent auth failure latch and reauth callback."""
+        fixed_time = 1000000000
+        token_manager = ElectroluxTokenManager(
+            access_token="test_access",
+            refresh_token="test_refresh",
+            api_key="test_api_key",
+        )
+        mock_auth_cb = AsyncMock()
+        token_manager.set_auth_error_callback(mock_auth_cb)
+
+        with (
+            patch.object(token_manager, "is_token_valid", return_value=False),
+            patch(
+                "custom_components.electrolux.token_manager.request",
+                side_effect=Exception("401 Unauthorized: invalid_grant"),
+            ),
+            patch(
+                "custom_components.electrolux.token_manager.time.time",
+                return_value=fixed_time,
+            ),
+        ):
+            result = await token_manager.refresh_token()
+            assert result is False
+            assert token_manager._permanent_auth_failure is True
+            assert token_manager._consecutive_failures == 0
+            mock_auth_cb.assert_called_once()
 
 
 class TestTokenManagerMissingCoverage:
@@ -687,13 +826,12 @@ class TestTokenManagerMissingCoverage:
         ):
             result = tm.is_token_valid()
         assert result is False
-        assert tm._marked_needs_refresh is True
 
-    # ── lines 170-175: refresh_token on cooldown, _marked_needs_refresh=False ─
+    # ── lines 170-175: refresh_token on cooldown ─────────────────────────────
 
     @pytest.mark.asyncio
     async def test_refresh_token_returns_false_on_cooldown(self):
-        """Lines 170-175 — refresh_token returns False when on cooldown (no bypass flag)."""
+        """Lines 170-175 — refresh_token returns False when on cooldown."""
         import time as time_module
         from unittest.mock import patch
 
@@ -704,20 +842,13 @@ class TestTokenManagerMissingCoverage:
             refresh_token="ref",
             api_key="key",
         )
-        current_time = int(time_module.time())
-        # Set failure history so backoff applies
+        current_time = time_module.time()
         tm._consecutive_failures = 1
-        tm._last_failed_refresh = current_time - 10  # failed 10s ago (backoff=120s)
-        tm._marked_needs_refresh = False  # no bypass
+        tm._current_backoff = 30.0
+        tm._last_failed_refresh = current_time - 10.0  # failed 10s ago (backoff=30s)
 
-        with patch(
-            "custom_components.electrolux.token_manager.jwt.decode",
-            return_value={"exp": current_time + 3600},  # token appears valid
-        ):
-            # is_token_valid will return True → refresh_token returns True immediately
-            # We need is_token_valid to return False. Patch it directly:
-            with patch.object(tm, "is_token_valid", return_value=False):
-                result = await tm.refresh_token()
+        with patch.object(tm, "is_token_valid", return_value=False):
+            result = await tm.refresh_token()
         assert result is False
 
     # ── lines 188-191: refresh_token raises when auth_data is missing ─────────
@@ -736,14 +867,15 @@ class TestTokenManagerMissingCoverage:
             refresh_token="ref",
             api_key="key",
         )
-        # Make auth_data return refresh_token=None
         mock_auth = MagicMock()
         mock_auth.refresh_token = None
         tm._auth_data = mock_auth
 
-        with patch.object(tm, "is_token_valid", return_value=False):
-            with pytest.raises(ConfigEntryAuthFailed, match="Missing refresh token"):
-                await tm.refresh_token()
+        with (
+            patch.object(tm, "is_token_valid", return_value=False),
+            pytest.raises(ConfigEntryAuthFailed, match="Missing refresh token"),
+        ):
+            await tm.refresh_token()
 
     # ── line 286: no auth error callback when permanent auth error occurs ─────
 
@@ -759,7 +891,6 @@ class TestTokenManagerMissingCoverage:
             refresh_token="ref",
             api_key="key",
         )
-        # Ensure no auth error callback is registered
         tm._on_auth_error = None
 
         with (
@@ -771,7 +902,6 @@ class TestTokenManagerMissingCoverage:
         ):
             result = await tm.refresh_token()
 
-        # Should return False (permanent auth error, no callback to trigger reauth)
         assert result is False
 
 

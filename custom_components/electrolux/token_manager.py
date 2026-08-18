@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import random
 import time
 from collections.abc import Awaitable, Callable
 
@@ -25,6 +26,11 @@ from .const import ACCESS_TOKEN_VALIDITY_SECONDS
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 
+# Progressive exponential backoff settings for token refresh failures
+BASE_REFRESH_BACKOFF_SECONDS = 15.0
+MAX_REFRESH_BACKOFF_SECONDS = 300.0  # 5 minutes max cooldown
+PROACTIVE_REFRESH_BUFFER_SECONDS = 900  # 15 minutes before expiry
+
 
 class ElectroluxTokenManager(TokenManager):
     """Custom token manager with extended proactive refresh buffer.
@@ -46,12 +52,12 @@ class ElectroluxTokenManager(TokenManager):
         self._on_token_update_with_expiry: Callable[[str, str, str, int], None] | None = None
         self._on_auth_error: Callable[[str], Awaitable[None]] | None = None
         self._refresh_lock = asyncio.Lock()
-        self._last_failed_refresh = 0  # Track failed refresh attempts
-        self._consecutive_failures = 0  # Track consecutive refresh failures for backoff
-        self._marked_needs_refresh = False  # Flag to bypass cooldown if refresh needed
-        self._permanent_auth_failure = False  # Set on 401/invalid-grant; stops retry loop until new creds are loaded
-        self._last_log_time = 0.0  # Cache timestamp for log throttling
-        self._last_log_status = ""  # Cache last logged status
+        self._last_failed_refresh: float = 0.0  # Track timestamp of failed refresh attempt
+        self._consecutive_failures: int = 0  # Track consecutive refresh failures for backoff
+        self._current_backoff: float = 0.0  # Current effective backoff delay with jitter
+        self._permanent_auth_failure: bool = False  # Set on 401/invalid-grant; stops retry loop until new creds
+        self._last_log_time: float = 0.0  # Cache timestamp for log throttling
+        self._last_log_status: str = ""  # Cache last logged status
 
     def is_token_valid(self) -> bool:
         """Check token validity with 15-minute proactive refresh buffer.
@@ -78,22 +84,23 @@ class ElectroluxTokenManager(TokenManager):
                 return False
 
             current_time = time.time()
-
-            # 900 seconds = 15 minutes proactive refresh buffer
-            # (vs SDK's default 60 seconds)
             time_remaining = exp - current_time
-            is_valid = time_remaining > 900
+            is_valid = time_remaining > PROACTIVE_REFRESH_BUFFER_SECONDS
 
             # Format time remaining as hours and minutes
             hours = int(time_remaining // 3600)
             minutes = int((time_remaining % 3600) // 60)
 
             if not is_valid:
-                _LOGGER.info(
-                    f"[TOKEN-CHECK] Token expiring soon: {hours} hours, {minutes} minutes remaining (< 15 min buffer), "
-                    f"triggering proactive refresh"
-                )
-                self._marked_needs_refresh = True  # Mark to bypass cooldown
+                status_msg = f"expiring: {hours}h {minutes}m"
+                time_since_log = current_time - self._last_log_time
+                if self._last_log_status != status_msg or time_since_log >= 30:
+                    _LOGGER.info(
+                        f"[TOKEN-CHECK] Token expiring soon: {hours} hours, {minutes} minutes remaining (< 15 min buffer), "
+                        f"triggering proactive refresh"
+                    )
+                    self._last_log_time = current_time
+                    self._last_log_status = status_msg
             else:
                 # Only log if status changed or 30+ seconds since last log (reduce noise)
                 status_msg = f"valid: {hours}h {minutes}m"
@@ -107,7 +114,6 @@ class ElectroluxTokenManager(TokenManager):
 
         except jwt.ExpiredSignatureError:
             _LOGGER.info("[TOKEN-CHECK] Access token already expired, refresh required")
-            self._marked_needs_refresh = True
             return False
         except Exception as e:
             _LOGGER.error(f"[TOKEN-CHECK] Token validation error: {e}")
@@ -122,20 +128,28 @@ class ElectroluxTokenManager(TokenManager):
         """Set callback for authentication errors."""
         self._on_auth_error = callback
 
+    def _calculate_backoff(self) -> float:
+        """Calculate progressive exponential backoff delay with jitter."""
+        # Progressive backoff: 15s -> 30s -> 60s -> 120s -> 240s -> 300s (capped)
+        multiplier = 2 ** min(self._consecutive_failures - 1, 5) if self._consecutive_failures > 0 else 1
+        raw_backoff = min(BASE_REFRESH_BACKOFF_SECONDS * multiplier, MAX_REFRESH_BACKOFF_SECONDS)
+        # Apply ±10% jitter to prevent synchronized retry spikes
+        jitter = random.uniform(0.9, 1.1)
+        return round(raw_backoff * jitter, 1)
+
     async def refresh_token(self) -> bool:
-        """Refresh the access token with race condition protection.
+        """Refresh the access token with race condition protection and strict backoff.
 
         This method is thread-safe and can be called concurrently from anywhere.
         It acquires the refresh lock internally to prevent race conditions when
-        multiple API calls trigger refresh simultaneously (e.g., SDK's automatic
-        401 retry or proactive refresh from get_auth_data()).
+        multiple API calls trigger refresh simultaneously.
 
         Returns:
             bool: True if refresh succeeded, False otherwise.
         """
         async with self._refresh_lock:
-            current_time = int(time.time())
-            _LOGGER.debug(f"[TOKEN-REFRESH] Refresh initiated at {current_time}")
+            current_time = time.time()
+            _LOGGER.debug(f"[TOKEN-REFRESH] Refresh initiated at {int(current_time)}")
 
             # Stop immediately if credentials are known-bad (permanent 401)
             # Only reset after user provides new credentials via reauth flow
@@ -151,25 +165,16 @@ class ElectroluxTokenManager(TokenManager):
                 _LOGGER.debug("[TOKEN-REFRESH] Token already fresh (refreshed by concurrent task), skipping refresh")
                 return True
 
-            # Exponential backoff based on consecutive failures
-            # Base: 60s, doubles each failure up to max 5 minutes (300s)
-            backoff_delay = min(60 * (2**self._consecutive_failures), 300)
-
-            # Check retry cooldown: don't attempt refresh if we failed recently
-            # UNLESS token is marked as needs_refresh (expired or expiring soon)
-            time_since_failure = current_time - self._last_failed_refresh
-            if time_since_failure < backoff_delay and not self._marked_needs_refresh:
-                cooldown_remaining = backoff_delay - time_since_failure
-                _LOGGER.warning(
-                    f"[TOKEN-REFRESH] Refresh on cooldown: {self._consecutive_failures} previous failures, "
-                    f"{cooldown_remaining:.0f}s remaining (backoff: {backoff_delay}s)"
-                )
-                return False
-
-            # If marked needs refresh, we bypass cooldown for one attempt
-            if self._marked_needs_refresh:
-                _LOGGER.debug("[TOKEN-REFRESH] Token marked needs refresh (expired/expiring), bypassing cooldown")
-                self._marked_needs_refresh = False
+            # Check retry cooldown: strictly enforce backoff delay on failures
+            if self._consecutive_failures > 0 and self._last_failed_refresh > 0:
+                time_since_failure = current_time - self._last_failed_refresh
+                if time_since_failure < self._current_backoff:
+                    cooldown_remaining = self._current_backoff - time_since_failure
+                    _LOGGER.warning(
+                        f"[TOKEN-REFRESH] Refresh on cooldown: {self._consecutive_failures} previous failures, "
+                        f"{cooldown_remaining:.0f}s remaining (backoff: {self._current_backoff:.0f}s)"
+                    )
+                    return False
 
             _LOGGER.debug("[TOKEN-REFRESH] Preparing token refresh request")
             auth_data = self._auth_data
@@ -219,9 +224,9 @@ class ElectroluxTokenManager(TokenManager):
                 )
 
                 # Clear failed refresh counter on success
-                self._last_failed_refresh = 0
+                self._last_failed_refresh = 0.0
                 self._consecutive_failures = 0  # Reset exponential backoff
-                self._marked_needs_refresh = False
+                self._current_backoff = 0.0
                 self._permanent_auth_failure = False  # New creds worked — clear the latch
                 _LOGGER.info(
                     f"[TOKEN-REFRESH] Token refresh completed successfully (new token valid for {exp_hours} hours, {exp_minutes} minutes)"
@@ -232,8 +237,38 @@ class ElectroluxTokenManager(TokenManager):
                 error_msg = str(e).lower()
                 _LOGGER.error(f"[TOKEN-REFRESH] Token refresh failed: {type(e).__name__}: {e}")
                 _LOGGER.debug(f"[TOKEN-REFRESH] Full error details: {error_msg}")
-                # Check for permanent token errors (401/Invalid Grant)
-                if any(keyword in error_msg for keyword in ["401", "invalid grant", "forbidden"]):
+
+                # Classify transient vs permanent error
+                is_transient = any(
+                    kw in error_msg
+                    for kw in [
+                        "429",
+                        "500",
+                        "502",
+                        "503",
+                        "504",
+                        "timeout",
+                        "temporarily unavailable",
+                        "rate limit",
+                        "connector",
+                        "connection",
+                        "reset",
+                    ]
+                )
+                is_permanent = not is_transient and any(
+                    kw in error_msg
+                    for kw in [
+                        "401",
+                        "invalid grant",
+                        "invalid_grant",
+                        "forbidden",
+                        "unauthorized",
+                        "invalid token",
+                        "invalid_token",
+                    ]
+                )
+
+                if is_permanent:
                     _LOGGER.error(f"[TOKEN-REFRESH] PERMANENT AUTH ERROR detected: {error_msg}")
                     # Check for possible multiple instance issue
                     if "invalid grant" in error_msg and self._consecutive_failures == 0:
@@ -245,6 +280,7 @@ class ElectroluxTokenManager(TokenManager):
                     # Latch: stop all future refresh attempts until new credentials are loaded
                     self._permanent_auth_failure = True
                     self._consecutive_failures = 0
+                    self._current_backoff = 0.0
                     # Trigger reauthentication once
                     if self._on_auth_error:
                         _LOGGER.warning(
@@ -256,14 +292,14 @@ class ElectroluxTokenManager(TokenManager):
                         _LOGGER.warning("[TOKEN-REFRESH] No auth error callback registered, cannot trigger reauth")
                     return False
 
-                # For other errors, set cooldown and return False
-                _LOGGER.warning(f"[TOKEN-REFRESH] Temporary refresh failure (will retry with backoff): {e}")
+                # For transient/other errors, set cooldown and return False
                 self._last_failed_refresh = current_time
                 self._consecutive_failures += 1
-                next_backoff = min(60 * (2**self._consecutive_failures), 300)
+                self._current_backoff = self._calculate_backoff()
                 _LOGGER.warning(
-                    f"[TOKEN-REFRESH] Failure tracking updated: consecutive_failures={self._consecutive_failures}, "
-                    f"next_backoff={next_backoff}s"
+                    f"[TOKEN-REFRESH] Temporary refresh failure (will retry with backoff): {e}. "
+                    f"Failure tracking: consecutive_failures={self._consecutive_failures}, "
+                    f"next_backoff={self._current_backoff:.0f}s"
                 )
                 return False
 
@@ -277,8 +313,11 @@ class ElectroluxTokenManager(TokenManager):
         if self._on_token_update_with_expiry:
             self._on_token_update_with_expiry(access_token, refresh_token, api_key, expires_at)
 
-        # Clear permanent failure latch — new credentials have been loaded
+        # Clear permanent failure latch and reset backoff — new credentials have been loaded
         self._permanent_auth_failure = False
+        self._consecutive_failures = 0
+        self._last_failed_refresh = 0.0
+        self._current_backoff = 0.0
 
         # Use parent's update method to maintain SDK compatibility
         # Parent will call _on_token_update callback and update _auth_data

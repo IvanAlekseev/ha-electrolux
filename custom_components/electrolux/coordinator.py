@@ -470,8 +470,8 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
                     and new_value is not None
                     and 0 < new_value < old_value
                 ):
-                    _LOGGER.debug(
-                        "timeToEnd decremented (%s → %s) while applianceState=%s for %s — desync detected, scheduling state refresh",
+                    _LOGGER.info(
+                        "[DESYNC-RECOVERY] timeToEnd decremented (%s → %s) while applianceState=%s for %s — desync detected, scheduling state refresh",
                         old_value,
                         new_value,
                         current_state,
@@ -1851,13 +1851,13 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
         backoff_desc = f"{int(backoff_seconds)}s" if backoff_seconds < 60 else f"{backoff_seconds / 60:.1f}min"
         if self._last_sse_restart_log_count <= 3 or self._last_sse_restart_log_count % 5 == 0:
             _LOGGER.info(
-                "SSE watchdog initiating stream restart (restart #%d, backoff %s)",
+                "[FAST-RECONNECT] SSE watchdog initiating stream restart (restart #%d, progressive backoff %s)",
                 self._consecutive_sse_restarts,
                 backoff_desc,
             )
         else:
             _LOGGER.debug(
-                "SSE watchdog initiating stream restart (restart #%d)",
+                "[FAST-RECONNECT] SSE watchdog initiating stream restart (restart #%d)",
                 self._consecutive_sse_restarts,
             )
 
@@ -1957,9 +1957,7 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
         current_time = self.hass.loop.time()
         # Progressive backoff: 15s -> 30s -> 1m -> 2m -> 4m -> 8m -> 16m -> 30m (capped)
         backoff_multiplier = min(2**self._consecutive_sse_restarts, 120)
-        effective_cooldown = min(
-            SSE_RESTART_BASE_COOLDOWN * backoff_multiplier, SSE_RESTART_MAX_COOLDOWN
-        )
+        effective_cooldown = min(SSE_RESTART_BASE_COOLDOWN * backoff_multiplier, SSE_RESTART_MAX_COOLDOWN)
 
         if current_time - self._last_sse_restart_time > effective_cooldown:
             self._last_sse_restart_time = current_time

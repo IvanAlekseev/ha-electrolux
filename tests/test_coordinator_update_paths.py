@@ -460,17 +460,16 @@ class TestRenewWebsocket:
 
     @pytest.mark.asyncio
     async def test_renew_websocket_token_refresh_false_skips_reconnect(self, coordinator):
-        """When refresh_token returns False, reconnect is skipped."""
+        """When refresh_token returns False, reconnect is skipped and retry delay (15s) is used."""
         mock_token_manager = MagicMock()
         mock_token_manager.is_token_valid.return_value = False
         coordinator.api._token_manager = mock_token_manager
 
-        success_count = 0
+        sleep_delays = []
 
         async def mock_sleep(delay):
-            nonlocal success_count
-            success_count += 1
-            if success_count >= 2:
+            sleep_delays.append(delay)
+            if len(sleep_delays) >= 2:
                 raise asyncio.CancelledError()
 
         coordinator.api.disconnect_websocket = AsyncMock()
@@ -491,15 +490,19 @@ class TestRenewWebsocket:
         # Disconnect and listen must NOT be called when token refresh returns False
         coordinator.api.disconnect_websocket.assert_not_called()
         coordinator.listen_websocket.assert_not_called()
+        # First sleep is normal renew_interval (7200s), second sleep on failure is retry delay (15s)
+        assert sleep_delays[0] == coordinator.renew_interval
+        assert sleep_delays[1] == 15.0
 
     @pytest.mark.asyncio
     async def test_renew_websocket_token_refresh_timeout(self, coordinator):
-        """Token refresh timeout before renewal is handled gracefully."""
+        """Token refresh timeout before renewal uses bounded retry delay (15s)."""
         mock_token_manager = MagicMock()
         mock_token_manager.is_token_valid.return_value = False
         coordinator.api._token_manager = mock_token_manager
 
         call_count = 0
+        sleep_delays = []
 
         async def mock_wait_for(coro, timeout=None):
             nonlocal call_count
@@ -509,14 +512,10 @@ class TestRenewWebsocket:
             if call_count == 1:
                 # First call: token refresh - timeout
                 raise asyncio.TimeoutError()
-            # Second call and beyond: noop
-
-        success_count = 0
 
         async def mock_sleep(delay):
-            nonlocal success_count
-            success_count += 1
-            if success_count >= 1:
+            sleep_delays.append(delay)
+            if len(sleep_delays) >= 2:
                 raise asyncio.CancelledError()
 
         coordinator.api.disconnect_websocket = AsyncMock()
@@ -529,14 +528,18 @@ class TestRenewWebsocket:
                 except asyncio.CancelledError:
                     pass
 
+        assert sleep_delays[0] == coordinator.renew_interval
+        assert sleep_delays[1] == 15.0
+
     @pytest.mark.asyncio
     async def test_renew_websocket_token_refresh_exception(self, coordinator):
-        """Token refresh exception before renewal is handled gracefully."""
+        """Token refresh exception before renewal uses bounded retry delay (15s)."""
         mock_token_manager = MagicMock()
         mock_token_manager.is_token_valid.return_value = False
         coordinator.api._token_manager = mock_token_manager
 
         call_count = 0
+        sleep_delays = []
 
         async def mock_wait_for(coro, timeout=None):
             nonlocal call_count
@@ -547,12 +550,9 @@ class TestRenewWebsocket:
                 # First call: token refresh - exception
                 raise Exception("refresh failed")
 
-        success_count = 0
-
         async def mock_sleep(delay):
-            nonlocal success_count
-            success_count += 1
-            if success_count >= 1:
+            sleep_delays.append(delay)
+            if len(sleep_delays) >= 2:
                 raise asyncio.CancelledError()
 
         coordinator.api.disconnect_websocket = AsyncMock()
@@ -565,9 +565,12 @@ class TestRenewWebsocket:
                 except asyncio.CancelledError:
                     pass
 
+        assert sleep_delays[0] == coordinator.renew_interval
+        assert sleep_delays[1] == 15.0
+
     @pytest.mark.asyncio
     async def test_renew_websocket_too_many_failures_backs_off(self, coordinator):
-        """After max consecutive failures, a 5-minute backoff is applied."""
+        """After max consecutive failures, a 5-minute backoff (300s) is applied."""
         sleep_delays = []
         failure_count = 0
 
@@ -580,7 +583,8 @@ class TestRenewWebsocket:
 
         async def mock_sleep(delay):
             sleep_delays.append(delay)
-            if len(sleep_delays) >= 3:
+            # Initial (renew_interval) + 5 failure retries (15s each) + 1 backoff (300s) = 7 sleeps
+            if len(sleep_delays) >= 7:
                 raise asyncio.CancelledError()
 
         coordinator.api._token_manager = MagicMock()
@@ -592,6 +596,14 @@ class TestRenewWebsocket:
                     await coordinator.renew_websocket()
                 except asyncio.CancelledError:
                     pass
+
+        # First sleep is renew_interval
+        assert sleep_delays[0] == coordinator.renew_interval
+        # Next 4 sleeps (failures 1-4) are WEBSOCKET_RETRY_DELAY (15s)
+        for d in sleep_delays[1:5]:
+            assert d == 15.0
+        # 5th failure triggers 5-minute backoff (300s)
+        assert sleep_delays[5] == 300.0
 
 
 # ---------------------------------------------------------------------------

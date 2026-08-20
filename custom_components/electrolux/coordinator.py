@@ -65,6 +65,7 @@ TASK_CANCEL_TIMEOUT = 2.0  # seconds for task cancellation timeouts
 TASK_CANCEL_EXCEPTIONS = (TimeoutError, asyncio.CancelledError)
 WEBSOCKET_DISCONNECT_TIMEOUT = 5.0  # seconds for websocket disconnect
 WEBSOCKET_BACKOFF_DELAY = 300  # 5 minutes in seconds for backoff
+API_DISCONNECT_TIMEOUT = 3.0  # seconds for API disconnect
 SSE_RESTART_BASE_COOLDOWN = 15.0  # seconds: base cooldown before first SSE restart attempt
 SSE_RESTART_MAX_COOLDOWN = 1800.0  # 30 minutes: maximum exponential backoff cooldown
 SSE_RESTART_COOLDOWN = SSE_RESTART_BASE_COOLDOWN  # backwards compatibility alias

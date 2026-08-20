@@ -89,6 +89,8 @@ def coordinator(mock_hass, mock_api):
         coord._appliances_cache = None
         coord._last_remote_control = {}
         coord._pending_state_refresh_tasks = {}
+        coord._last_sse_resync_time = 0.0
+        coord._pending_sse_resync_task = None
         monitor_task = MagicMock()
         monitor_task.done.return_value = True
         coord._sse_stall_monitor_task = monitor_task
@@ -228,15 +230,132 @@ class TestCanRestartSse:
         coordinator._can_restart_sse()
         assert coordinator._last_sse_restart_time == 5000.0
 
-    def test_returns_false_within_cooldown(self, coordinator):
+    def test_returns_false_within_base_cooldown(self, coordinator):
         coordinator.hass.loop.time.return_value = 1000.0
-        coordinator._last_sse_restart_time = 500.0  # 500s ago < 900s cooldown
+        coordinator._consecutive_sse_restarts = 0
+        coordinator._last_sse_restart_time = 995.0  # 5s ago < 15s base cooldown
         assert coordinator._can_restart_sse() is False
 
-    def test_returns_true_after_cooldown(self, coordinator):
-        coordinator.hass.loop.time.return_value = 2000.0
-        coordinator._last_sse_restart_time = 0.0  # > 900s ago
+    def test_returns_true_after_base_cooldown(self, coordinator):
+        coordinator.hass.loop.time.return_value = 1000.0
+        coordinator._consecutive_sse_restarts = 0
+        coordinator._last_sse_restart_time = 980.0  # 20s ago > 15s base cooldown
         assert coordinator._can_restart_sse() is True
+
+    @pytest.mark.parametrize(
+        ("consecutive_restarts", "expected_cooldown"),
+        [
+            (0, 15.0),    # 15s * 2^0 = 15s
+            (1, 30.0),    # 15s * 2^1 = 30s
+            (2, 60.0),    # 15s * 2^2 = 60s
+            (3, 120.0),   # 15s * 2^3 = 120s
+            (4, 240.0),   # 15s * 2^4 = 240s
+            (5, 480.0),   # 15s * 2^5 = 480s
+            (6, 960.0),   # 15s * 2^6 = 960s
+            (7, 1800.0),  # 15s * 2^7 = 1920s -> capped at 1800s (30m)
+            (10, 1800.0), # capped at 1800s
+            (50, 1800.0), # capped at 1800s
+        ],
+    )
+    def test_progressive_exponential_backoff_steps(
+        self, coordinator, consecutive_restarts, expected_cooldown
+    ):
+        coordinator._last_sse_restart_time = 1000.0
+        coordinator._consecutive_sse_restarts = consecutive_restarts
+
+        # 1 second before effective cooldown expires -> False
+        coordinator.hass.loop.time.return_value = 1000.0 + expected_cooldown - 1.0
+        assert coordinator._can_restart_sse() is False
+
+        # Exactly after effective cooldown expires -> True
+        coordinator.hass.loop.time.return_value = 1000.0 + expected_cooldown + 1.0
+        assert coordinator._can_restart_sse() is True
+
+    @pytest.mark.asyncio
+    async def test_on_sse_connected_resets_restart_counter_when_data_received(
+        self, coordinator
+    ):
+        coordinator._consecutive_sse_restarts = 5
+        coordinator._last_sse_restart_log_count = 5
+        coordinator._sse_data_received_since_connect = True
+        coordinator._last_sse_resync_time = 0.0
+        coordinator.hass.loop.time.return_value = 1000.0
+
+        await coordinator._on_sse_connected()
+
+        assert coordinator._consecutive_sse_restarts == 0
+        assert coordinator._last_sse_restart_log_count == 0
+        assert coordinator._sse_data_received_since_connect is False
+
+    @pytest.mark.asyncio
+    async def test_on_sse_connected_preserves_restart_counter_when_no_data_received(
+        self, coordinator
+    ):
+        coordinator._consecutive_sse_restarts = 5
+        coordinator._last_sse_restart_log_count = 5
+        coordinator._sse_data_received_since_connect = False
+        coordinator._last_sse_resync_time = 0.0
+        coordinator.hass.loop.time.return_value = 1000.0
+
+        await coordinator._on_sse_connected()
+
+        # Counter is preserved to maintain backoff escalation during empty reconnects
+        assert coordinator._consecutive_sse_restarts == 5
+        assert coordinator._last_sse_restart_log_count == 5
+
+    @pytest.mark.asyncio
+    async def test_check_sse_stall_triggers_restart_and_increments_counter(
+        self, coordinator
+    ):
+        coordinator._last_sse_message_time = 500.0
+        coordinator._last_sse_restart_time = 0.0
+        coordinator._consecutive_sse_restarts = 0
+        coordinator._last_sse_restart_log_count = 0
+        coordinator.hass.loop.time.return_value = 1000.0  # 500s elapsed > 300s threshold
+
+        mock_task = MagicMock()
+        mock_task.done.return_value = False
+        coordinator.api._sse_task = mock_task
+
+        app = MagicMock()
+        app.state = {"connectivityState": "connected"}
+        app_dict = {"app1": app}
+
+        coordinator.api.disconnect_websocket = AsyncMock()
+        coordinator.listen_websocket = AsyncMock()
+
+        await coordinator._restart_sse_if_stalled(app_dict)
+
+        assert coordinator._consecutive_sse_restarts == 1
+        assert coordinator._last_sse_restart_log_count == 1
+        coordinator.api.disconnect_websocket.assert_awaited_once()
+        coordinator.listen_websocket.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_check_sse_stall_skipped_when_cooldown_active(
+        self, coordinator
+    ):
+        coordinator._last_sse_message_time = 500.0
+        coordinator._last_sse_restart_time = 995.0  # Only 5s ago < 15s cooldown
+        coordinator._consecutive_sse_restarts = 0
+        coordinator.hass.loop.time.return_value = 1000.0  # 500s elapsed > 300s threshold
+
+        mock_task = MagicMock()
+        mock_task.done.return_value = False
+        coordinator.api._sse_task = mock_task
+
+        app = MagicMock()
+        app.state = {"connectivityState": "connected"}
+        app_dict = {"app1": app}
+
+        coordinator.api.disconnect_websocket = AsyncMock()
+        coordinator.listen_websocket = AsyncMock()
+
+        await coordinator._restart_sse_if_stalled(app_dict)
+
+        assert coordinator._consecutive_sse_restarts == 0
+        coordinator.api.disconnect_websocket.assert_not_called()
+        coordinator.listen_websocket.assert_not_called()
 
 
 # ===========================================================================

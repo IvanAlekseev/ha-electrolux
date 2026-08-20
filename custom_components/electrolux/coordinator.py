@@ -1000,11 +1000,29 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
                         _LOGGER.debug("Token invalid/expiring before websocket renewal, triggering refresh")
                         try:
                             # Give refresh up to 30 seconds to complete
-                            await asyncio.wait_for(token_manager.refresh_token(), timeout=30.0)
+                            refreshed = await asyncio.wait_for(token_manager.refresh_token(), timeout=30.0)
+                            if not refreshed:
+                                _LOGGER.warning(
+                                    "Token refresh returned False before websocket renewal — skipping reconnect"
+                                )
+                                consecutive_failures += 1
+                                if consecutive_failures >= max_consecutive_failures:
+                                    _LOGGER.warning(
+                                        "SSE reconnection failed %d times in a row — backing off for %ds before retry",
+                                        consecutive_failures,
+                                        WEBSOCKET_BACKOFF_DELAY,
+                                    )
+                                    await asyncio.sleep(WEBSOCKET_BACKOFF_DELAY)
+                                    consecutive_failures = 0
+                                continue
                         except TimeoutError:
                             _LOGGER.warning("Token refresh timed out before websocket renewal")
+                            consecutive_failures += 1
+                            continue
                         except Exception as ex:
                             _LOGGER.warning(f"Token refresh failed before websocket renewal: {ex}")
+                            consecutive_failures += 1
+                            continue
 
                 # Cancel existing SSE task before disconnecting
                 # Note: util.py watch_for_appliance_state_updates handles kill-before-restart,

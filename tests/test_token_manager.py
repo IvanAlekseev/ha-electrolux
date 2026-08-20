@@ -771,6 +771,47 @@ class TestElectroluxTokenManager401:
             assert token_manager._consecutive_failures == 0
             mock_auth_cb.assert_called_once()
 
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "error_string",
+        [
+            "401 connection reset",
+            "401 ClientResponseError: unauthorized (connection reset by peer)",
+            "ClientResponseError: 401, message='Unauthorized', url='...': connection closed",
+            "invalid_grant: timeout contacting token endpoint",
+        ],
+    )
+    async def test_token_refresh_overlapping_error_message_classified_as_permanent(self, error_string):
+        """Test that compound error messages containing both permanent and transient substrings
+
+        (e.g., '401 connection reset') are strictly classified as permanent auth failures.
+        """
+        fixed_time = 1000000000
+        token_manager = ElectroluxTokenManager(
+            access_token="test_access",
+            refresh_token="test_refresh",
+            api_key="test_api_key",
+        )
+        mock_auth_cb = AsyncMock()
+        token_manager.set_auth_error_callback(mock_auth_cb)
+
+        with (
+            patch.object(token_manager, "is_token_valid", return_value=False),
+            patch(
+                "custom_components.electrolux.token_manager.request",
+                side_effect=Exception(error_string),
+            ),
+            patch(
+                "custom_components.electrolux.token_manager.time.time",
+                return_value=fixed_time,
+            ),
+        ):
+            result = await token_manager.refresh_token()
+            assert result is False
+            assert token_manager._permanent_auth_failure is True
+            assert token_manager._consecutive_failures == 0
+            mock_auth_cb.assert_called_once()
+
 
 class TestTokenManagerMissingCoverage:
     """Tests targeting the remaining missed lines in token_manager.py."""

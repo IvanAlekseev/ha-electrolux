@@ -1936,9 +1936,7 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
         current_time = self.hass.loop.time()
         # Progressive backoff: 15s -> 30s -> 1m -> 2m -> 4m -> 8m -> 16m -> 30m (capped)
         backoff_multiplier = min(2**self._consecutive_sse_restarts, 120)
-        effective_cooldown = min(
-            SSE_RESTART_BASE_COOLDOWN * backoff_multiplier, SSE_RESTART_MAX_COOLDOWN
-        )
+        effective_cooldown = min(SSE_RESTART_BASE_COOLDOWN * backoff_multiplier, SSE_RESTART_MAX_COOLDOWN)
 
         if current_time - self._last_sse_restart_time > effective_cooldown:
             self._last_sse_restart_time = current_time

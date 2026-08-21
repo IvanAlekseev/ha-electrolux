@@ -65,8 +65,10 @@ TASK_CANCEL_TIMEOUT = 2.0  # seconds for task cancellation timeouts
 TASK_CANCEL_EXCEPTIONS = (TimeoutError, asyncio.CancelledError)
 WEBSOCKET_DISCONNECT_TIMEOUT = 5.0  # seconds for websocket disconnect
 WEBSOCKET_BACKOFF_DELAY = 300  # 5 minutes in seconds for backoff
+WEBSOCKET_RETRY_DELAY = 15.0  # seconds for renewal retry backoff
 API_DISCONNECT_TIMEOUT = 3.0  # seconds for API disconnect
-SSE_RESTART_COOLDOWN = 900  # 15 minutes: cooldown between SSE restart attempts
+SSE_RESTART_BASE_COOLDOWN = 15.0  # seconds: base cooldown before first SSE restart attempt
+SSE_RESTART_MAX_COOLDOWN = 1800.0  # 30 minutes: maximum exponential backoff cooldown
 SSE_STALL_THRESHOLD = 300.0  # seconds without SSE messages before forced reconnect
 SSE_STALL_CHECK_INTERVAL = 60.0  # seconds between watchdog checks
 
@@ -984,61 +986,76 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
         """Renew SSE event stream."""
         consecutive_failures = 0
         max_consecutive_failures = 5
+        next_interval = self.renew_interval
 
         while True:
             try:
-                await asyncio.sleep(self.renew_interval)
+                await asyncio.sleep(next_interval)
                 _LOGGER.debug("Electrolux renew SSE event stream")
 
                 # Validate token before reconnection to avoid using expired tokens
                 # This is a medium-priority improvement to prevent websocket connection failures
+                token_refreshed = True
                 if hasattr(self.api, "_token_manager"):
                     token_manager = self.api._token_manager
                     if not token_manager.is_token_valid():
                         _LOGGER.debug("Token invalid/expiring before websocket renewal, triggering refresh")
                         try:
                             # Give refresh up to 30 seconds to complete
-                            await asyncio.wait_for(token_manager.refresh_token(), timeout=30.0)
+                            token_refreshed = await asyncio.wait_for(token_manager.refresh_token(), timeout=30.0)
+                            if not token_refreshed:
+                                _LOGGER.warning(
+                                    "Token refresh returned False before websocket renewal — skipping reconnect"
+                                )
                         except TimeoutError:
                             _LOGGER.warning("Token refresh timed out before websocket renewal")
+                            token_refreshed = False
                         except Exception as ex:
                             _LOGGER.warning(f"Token refresh failed before websocket renewal: {ex}")
+                            token_refreshed = False
 
-                # Cancel existing SSE task before disconnecting
-                # Note: util.py watch_for_appliance_state_updates handles kill-before-restart,
-                # but we still need to disconnect here for renewal
+                if token_refreshed:
+                    # Cancel existing SSE task before disconnecting
+                    # Note: util.py watch_for_appliance_state_updates handles kill-before-restart,
+                    # but we still need to disconnect here for renewal
 
-                # Disconnect and reconnect with timeout
-                try:
-                    await asyncio.wait_for(
-                        self.api.disconnect_websocket(),
-                        timeout=WEBSOCKET_DISCONNECT_TIMEOUT,
-                    )
-                    await asyncio.wait_for(self.listen_websocket(), timeout=UPDATE_TIMEOUT)
-                    consecutive_failures = 0  # Reset on success
-                except TimeoutError:
-                    _LOGGER.warning("Timeout during websocket renewal")
+                    # Disconnect and reconnect with timeout
+                    try:
+                        await asyncio.wait_for(
+                            self.api.disconnect_websocket(),
+                            timeout=WEBSOCKET_DISCONNECT_TIMEOUT,
+                        )
+                        await asyncio.wait_for(self.listen_websocket(), timeout=UPDATE_TIMEOUT)
+                        consecutive_failures = 0  # Reset on success
+                        next_interval = self.renew_interval
+                    except TimeoutError:
+                        _LOGGER.warning("Timeout during websocket renewal")
+                        consecutive_failures += 1
+                    except Exception as ex:
+                        _LOGGER.error("Error during websocket renewal: %s", ex)
+                        consecutive_failures += 1
+                else:
                     consecutive_failures += 1
-                except Exception as ex:
-                    _LOGGER.error("Error during websocket renewal: %s", ex)
-                    consecutive_failures += 1
 
-                # If too many consecutive failures, back off
-                if consecutive_failures >= max_consecutive_failures:
-                    _LOGGER.warning(
-                        "SSE reconnection failed %d times in a row — backing off for %ds before retry",
-                        consecutive_failures,
-                        WEBSOCKET_BACKOFF_DELAY,
-                    )
-                    await asyncio.sleep(WEBSOCKET_BACKOFF_DELAY)
-                    consecutive_failures = 0
+                # If renewal or token refresh failed, use short/bounded retry delay instead of 2h renew_interval
+                if consecutive_failures > 0:
+                    if consecutive_failures >= max_consecutive_failures:
+                        _LOGGER.warning(
+                            "SSE reconnection failed %d times in a row — backing off for %ds before retry",
+                            consecutive_failures,
+                            WEBSOCKET_BACKOFF_DELAY,
+                        )
+                        next_interval = WEBSOCKET_BACKOFF_DELAY
+                        consecutive_failures = 0
+                    else:
+                        next_interval = WEBSOCKET_RETRY_DELAY
 
             except asyncio.CancelledError:
                 _LOGGER.debug("Websocket renewal cancelled")
                 raise
             except Exception as ex:
                 _LOGGER.error(f"Electrolux renew SSE failed {ex}")
-                consecutive_failures += 1
+                next_interval = WEBSOCKET_RETRY_DELAY
 
     async def close_websocket(self):
         """Close SSE event stream."""
@@ -1780,6 +1797,14 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
         # Without this, returning the same object reference prevents entity updates
         return dict(self.data)
 
+    @staticmethod
+    def _sse_backoff_seconds(restarts: int) -> float:
+        """Calculate progressive exponential backoff in seconds for SSE restarts."""
+        return min(
+            SSE_RESTART_BASE_COOLDOWN * min(2**restarts, 120),
+            SSE_RESTART_MAX_COOLDOWN,
+        )
+
     async def _restart_sse_if_stalled(self, app_dict: dict[str, Any]) -> None:
         """Restart SSE if stream is stale while at least one appliance is connected."""
         sse_task = getattr(self.api, "_sse_task", None)
@@ -1821,12 +1846,13 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
         self._last_sse_restart_log_count += 1
 
         # Log summary every 5 restarts or on the first few to avoid spam
-        backoff_minutes = (SSE_RESTART_COOLDOWN * min(2**self._consecutive_sse_restarts, 8)) / 60
+        backoff_seconds = self._sse_backoff_seconds(self._consecutive_sse_restarts)
+        backoff_desc = f"{int(backoff_seconds)}s" if backoff_seconds < 60 else f"{backoff_seconds / 60:.1f}min"
         if self._last_sse_restart_log_count <= 3 or self._last_sse_restart_log_count % 5 == 0:
             _LOGGER.info(
-                "SSE watchdog initiating stream restart (restart #%d, backoff %.0fmin)",
+                "SSE watchdog initiating stream restart (restart #%d, backoff %s)",
                 self._consecutive_sse_restarts,
-                backoff_minutes,
+                backoff_desc,
             )
         else:
             _LOGGER.debug(
@@ -1920,16 +1946,15 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
         await asyncio.gather(task, return_exceptions=True)
 
     def _can_restart_sse(self) -> bool:
-        """Check if we can restart SSE (debounced with exponential backoff).
+        """Check if we can restart SSE (debounced with progressive exponential backoff).
 
-        Uses exponential backoff based on consecutive restarts to avoid hammering
-        the server when connections are unstable. Base cooldown is 15 minutes,
-        doubling with each consecutive restart up to a maximum of 2 hours.
+        Uses progressive exponential backoff based on consecutive restarts:
+        restarts start fast (15s, 30s, 60s, 120s...) for quick recovery from transient
+        glitches, and scale up to 30 minutes during sustained outages to avoid hammering
+        the server and spamming logs.
         """
         current_time = self.hass.loop.time()
-        # Exponential backoff: 15min, 30min, 1h, 2h (capped)
-        backoff_multiplier = min(2**self._consecutive_sse_restarts, 8)
-        effective_cooldown = SSE_RESTART_COOLDOWN * backoff_multiplier
+        effective_cooldown = self._sse_backoff_seconds(self._consecutive_sse_restarts)
 
         if current_time - self._last_sse_restart_time > effective_cooldown:
             self._last_sse_restart_time = current_time

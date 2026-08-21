@@ -89,6 +89,8 @@ def coordinator(mock_hass, mock_api):
         coord._appliances_cache = None
         coord._last_remote_control = {}
         coord._pending_state_refresh_tasks = {}
+        coord._last_sse_resync_time = 0.0
+        coord._pending_sse_resync_task = None
         monitor_task = MagicMock()
         monitor_task.done.return_value = True
         coord._sse_stall_monitor_task = monitor_task
@@ -216,6 +218,27 @@ class TestShouldDeferUpdate:
 # ===========================================================================
 
 
+class TestSseBackoffSeconds:
+    @pytest.mark.parametrize(
+        ("restarts", "expected_seconds"),
+        [
+            (0, 15.0),
+            (1, 30.0),
+            (2, 60.0),
+            (3, 120.0),
+            (4, 240.0),
+            (5, 480.0),
+            (6, 960.0),
+            (7, 1800.0),
+            (10, 1800.0),
+            (100, 1800.0),
+        ],
+    )
+    def test_sse_backoff_calculation(self, coordinator, restarts, expected_seconds):
+        """Verify progressive exponential backoff formula and max capping."""
+        assert coordinator._sse_backoff_seconds(restarts) == expected_seconds
+
+
 class TestCanRestartSse:
     def test_returns_true_when_no_previous_restart(self, coordinator):
         coordinator._last_sse_restart_time = 0.0
@@ -228,15 +251,122 @@ class TestCanRestartSse:
         coordinator._can_restart_sse()
         assert coordinator._last_sse_restart_time == 5000.0
 
-    def test_returns_false_within_cooldown(self, coordinator):
+    def test_returns_false_within_base_cooldown(self, coordinator):
         coordinator.hass.loop.time.return_value = 1000.0
-        coordinator._last_sse_restart_time = 500.0  # 500s ago < 900s cooldown
+        coordinator._consecutive_sse_restarts = 0
+        coordinator._last_sse_restart_time = 995.0  # 5s ago < 15s base cooldown
         assert coordinator._can_restart_sse() is False
 
-    def test_returns_true_after_cooldown(self, coordinator):
-        coordinator.hass.loop.time.return_value = 2000.0
-        coordinator._last_sse_restart_time = 0.0  # > 900s ago
+    def test_returns_true_after_base_cooldown(self, coordinator):
+        coordinator.hass.loop.time.return_value = 1000.0
+        coordinator._consecutive_sse_restarts = 0
+        coordinator._last_sse_restart_time = 980.0  # 20s ago > 15s base cooldown
         assert coordinator._can_restart_sse() is True
+
+    @pytest.mark.parametrize(
+        ("consecutive_restarts", "expected_cooldown"),
+        [
+            (0, 15.0),  # 15s * 2^0 = 15s
+            (1, 30.0),  # 15s * 2^1 = 30s
+            (2, 60.0),  # 15s * 2^2 = 60s
+            (3, 120.0),  # 15s * 2^3 = 120s
+            (4, 240.0),  # 15s * 2^4 = 240s
+            (5, 480.0),  # 15s * 2^5 = 480s
+            (6, 960.0),  # 15s * 2^6 = 960s
+            (7, 1800.0),  # 15s * 2^7 = 1920s -> capped at 1800s (30m)
+            (10, 1800.0),  # capped at 1800s
+            (50, 1800.0),  # capped at 1800s
+        ],
+    )
+    def test_progressive_exponential_backoff_steps(self, coordinator, consecutive_restarts, expected_cooldown):
+        coordinator._last_sse_restart_time = 1000.0
+        coordinator._consecutive_sse_restarts = consecutive_restarts
+
+        # 1 second before effective cooldown expires -> False
+        coordinator.hass.loop.time.return_value = 1000.0 + expected_cooldown - 1.0
+        assert coordinator._can_restart_sse() is False
+
+        # Exactly after effective cooldown expires -> True
+        coordinator.hass.loop.time.return_value = 1000.0 + expected_cooldown + 1.0
+        assert coordinator._can_restart_sse() is True
+
+    @pytest.mark.asyncio
+    async def test_on_sse_connected_resets_restart_counter_when_data_received(self, coordinator):
+        coordinator._consecutive_sse_restarts = 5
+        coordinator._last_sse_restart_log_count = 5
+        coordinator._sse_data_received_since_connect = True
+        coordinator._last_sse_resync_time = 0.0
+        coordinator.hass.loop.time.return_value = 1000.0
+
+        await coordinator._on_sse_connected()
+
+        assert coordinator._consecutive_sse_restarts == 0
+        assert coordinator._last_sse_restart_log_count == 0
+        assert coordinator._sse_data_received_since_connect is False
+
+    @pytest.mark.asyncio
+    async def test_on_sse_connected_preserves_restart_counter_when_no_data_received(self, coordinator):
+        coordinator._consecutive_sse_restarts = 5
+        coordinator._last_sse_restart_log_count = 5
+        coordinator._sse_data_received_since_connect = False
+        coordinator._last_sse_resync_time = 0.0
+        coordinator.hass.loop.time.return_value = 1000.0
+
+        await coordinator._on_sse_connected()
+
+        # Counter is preserved to maintain backoff escalation during empty reconnects
+        assert coordinator._consecutive_sse_restarts == 5
+        assert coordinator._last_sse_restart_log_count == 5
+
+    @pytest.mark.asyncio
+    async def test_check_sse_stall_triggers_restart_and_increments_counter(self, coordinator):
+        coordinator._last_sse_message_time = 500.0
+        coordinator._last_sse_restart_time = 0.0
+        coordinator._consecutive_sse_restarts = 0
+        coordinator._last_sse_restart_log_count = 0
+        coordinator.hass.loop.time.return_value = 1000.0  # 500s elapsed > 300s threshold
+
+        mock_task = MagicMock()
+        mock_task.done.return_value = False
+        coordinator.api._sse_task = mock_task
+
+        app = MagicMock()
+        app.state = {"connectivityState": "connected"}
+        app_dict = {"app1": app}
+
+        coordinator.api.disconnect_websocket = AsyncMock()
+        coordinator.listen_websocket = AsyncMock()
+
+        await coordinator._restart_sse_if_stalled(app_dict)
+
+        assert coordinator._consecutive_sse_restarts == 1
+        assert coordinator._last_sse_restart_log_count == 1
+        coordinator.api.disconnect_websocket.assert_awaited_once()
+        coordinator.listen_websocket.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_check_sse_stall_skipped_when_cooldown_active(self, coordinator):
+        coordinator._last_sse_message_time = 500.0
+        coordinator._last_sse_restart_time = 995.0  # Only 5s ago < 15s cooldown
+        coordinator._consecutive_sse_restarts = 0
+        coordinator.hass.loop.time.return_value = 1000.0  # 500s elapsed > 300s threshold
+
+        mock_task = MagicMock()
+        mock_task.done.return_value = False
+        coordinator.api._sse_task = mock_task
+
+        app = MagicMock()
+        app.state = {"connectivityState": "connected"}
+        app_dict = {"app1": app}
+
+        coordinator.api.disconnect_websocket = AsyncMock()
+        coordinator.listen_websocket = AsyncMock()
+
+        await coordinator._restart_sse_if_stalled(app_dict)
+
+        assert coordinator._consecutive_sse_restarts == 0
+        coordinator.api.disconnect_websocket.assert_not_called()
+        coordinator.listen_websocket.assert_not_called()
 
 
 # ===========================================================================
@@ -334,9 +464,7 @@ class TestCheckDeferredUpdate:
             pytest.skip("No TIME_ENTITIES_TO_UPDATE defined")
         key = next(iter(TIME_ENTITIES_TO_UPDATE))
         with patch.object(coordinator, "_schedule_deferred_update") as mock_sched:
-            coordinator._check_deferred_update(
-                {PROPERTY_KEY: key, VALUE_KEY: 1}, "app1"
-            )
+            coordinator._check_deferred_update({PROPERTY_KEY: key, VALUE_KEY: 1}, "app1")
             mock_sched.assert_called_once_with("app1")
 
     def test_does_not_call_schedule_when_threshold_not_met(self, coordinator):
@@ -346,9 +474,7 @@ class TestCheckDeferredUpdate:
             pytest.skip("No TIME_ENTITIES_TO_UPDATE defined")
         key = next(iter(TIME_ENTITIES_TO_UPDATE))
         with patch.object(coordinator, "_schedule_deferred_update") as mock_sched:
-            coordinator._check_deferred_update(
-                {PROPERTY_KEY: key, VALUE_KEY: 999}, "app1"
-            )
+            coordinator._check_deferred_update({PROPERTY_KEY: key, VALUE_KEY: 999}, "app1")
             mock_sched.assert_not_called()
 
 
@@ -505,9 +631,7 @@ class TestProcessBulkUpdate:
 
 
 class TestProcessIncrementalUpdate:
-    def _make_data(
-        self, app_id: str = "app1", prop: str = "opMode", value: Any = "auto"
-    ):
+    def _make_data(self, app_id: str = "app1", prop: str = "opMode", value: Any = "auto"):
         return {APPLIANCE_ID_KEY: app_id, PROPERTY_KEY: prop, VALUE_KEY: value}
 
     def test_updates_appliance_on_changed_value(self, coordinator):
@@ -516,13 +640,9 @@ class TestProcessIncrementalUpdate:
         aps = _make_appliances({"app1": ap})
         coordinator.async_set_updated_data = MagicMock()
 
-        coordinator._process_incremental_update(
-            self._make_data("app1", "opMode", "auto"), aps
-        )
+        coordinator._process_incremental_update(self._make_data("app1", "opMode", "auto"), aps)
 
-        ap.update_reported_data.assert_called_once_with(
-            {"property": "opMode", "value": "auto"}
-        )
+        ap.update_reported_data.assert_called_once_with({"property": "opMode", "value": "auto"})
         coordinator.async_set_updated_data.assert_called_once()
 
     def test_skips_duplicate_value(self, coordinator):
@@ -531,9 +651,7 @@ class TestProcessIncrementalUpdate:
         aps = _make_appliances({"app1": ap})
         coordinator.async_set_updated_data = MagicMock()
 
-        coordinator._process_incremental_update(
-            self._make_data("app1", "opMode", "auto"), aps
-        )
+        coordinator._process_incremental_update(self._make_data("app1", "opMode", "auto"), aps)
 
         ap.update_reported_data.assert_not_called()
 
@@ -557,9 +675,7 @@ class TestProcessIncrementalUpdate:
         with caplog.at_level(logging.DEBUG, logger="custom_components.electrolux"):
             coordinator._process_incremental_update(data, aps)
 
-        duplicate_logs = [
-            r.getMessage() for r in caplog.records if "duplicate" in r.getMessage()
-        ]
+        duplicate_logs = [r.getMessage() for r in caplog.records if "duplicate" in r.getMessage()]
         assert duplicate_logs, "expected duplicate-SSE debug log line"
         for msg in duplicate_logs:
             assert secret_user_id not in msg, f"userId leaked in duplicate log: {msg}"
@@ -573,13 +689,9 @@ class TestProcessIncrementalUpdate:
         aps = _make_appliances({"app1": ap})
         coordinator.async_set_updated_data = MagicMock()
 
-        coordinator._process_incremental_update(
-            self._make_data("app1", "upperOven/runningTime", 120), aps
-        )
+        coordinator._process_incremental_update(self._make_data("app1", "upperOven/runningTime", 120), aps)
 
-        ap.update_reported_data.assert_called_once_with(
-            {"property": "upperOven/runningTime", "value": 120}
-        )
+        ap.update_reported_data.assert_called_once_with({"property": "upperOven/runningTime", "value": 120})
         coordinator.async_set_updated_data.assert_called_once()
 
     def test_skips_duplicate_nested_value(self, coordinator):
@@ -589,9 +701,7 @@ class TestProcessIncrementalUpdate:
         aps = _make_appliances({"app1": ap})
         coordinator.async_set_updated_data = MagicMock()
 
-        coordinator._process_incremental_update(
-            self._make_data("app1", "upperOven/doorState", "CLOSED"), aps
-        )
+        coordinator._process_incremental_update(self._make_data("app1", "upperOven/doorState", "CLOSED"), aps)
 
         ap.update_reported_data.assert_not_called()
 
@@ -599,9 +709,7 @@ class TestProcessIncrementalUpdate:
         aps = _make_appliances({})
         coordinator.async_set_updated_data = MagicMock()
 
-        coordinator._process_incremental_update(
-            self._make_data("unknown", "opMode", "auto"), aps
-        )
+        coordinator._process_incremental_update(self._make_data("unknown", "opMode", "auto"), aps)
 
         coordinator.async_set_updated_data.assert_not_called()
 
@@ -612,9 +720,7 @@ class TestProcessIncrementalUpdate:
         aps = _make_appliances({"app1": ap})
         coordinator.async_set_updated_data = MagicMock()
 
-        coordinator._process_incremental_update(
-            self._make_data("app1", "opMode", "auto"), aps
-        )
+        coordinator._process_incremental_update(self._make_data("app1", "opMode", "auto"), aps)
 
         coordinator.async_set_updated_data.assert_not_called()
 
@@ -641,9 +747,7 @@ class TestProcessIncrementalUpdate:
         aps = _make_appliances({"app1": ap})
         coordinator.async_set_updated_data = MagicMock()
 
-        coordinator._process_incremental_update(
-            self._make_data("app1", "opMode", "auto"), aps
-        )
+        coordinator._process_incremental_update(self._make_data("app1", "opMode", "auto"), aps)
 
         assert ap.state["connectivityState"] == "connected"
 
@@ -758,9 +862,7 @@ class TestDeferredUpdate:
         ap = _make_appliance("app1")
         aps = _make_appliances({"app1": ap})
         coordinator.data = {"appliances": aps}
-        coordinator.api.get_appliance_state = AsyncMock(
-            side_effect=ConnectionError("network error")
-        )
+        coordinator.api.get_appliance_state = AsyncMock(side_effect=ConnectionError("network error"))
 
         with patch("asyncio.sleep", new=AsyncMock()):
             # Should not raise
@@ -771,9 +873,7 @@ class TestDeferredUpdate:
         ap = _make_appliance("app1")
         aps = _make_appliances({"app1": ap})
         coordinator.data = {"appliances": aps}
-        coordinator.api.get_appliance_state = AsyncMock(
-            side_effect=asyncio.CancelledError()
-        )
+        coordinator.api.get_appliance_state = AsyncMock(side_effect=asyncio.CancelledError())
 
         with patch("asyncio.sleep", new=AsyncMock()):
             with pytest.raises(asyncio.CancelledError):
@@ -785,9 +885,7 @@ class TestDeferredUpdate:
         ap = _make_appliance("app1")
         aps = _make_appliances({"app1": ap})
         coordinator.data = {"appliances": aps}
-        coordinator.api.get_appliance_state = AsyncMock(
-            side_effect=ValueError("invalid data")
-        )
+        coordinator.api.get_appliance_state = AsyncMock(side_effect=ValueError("invalid data"))
 
         with patch("asyncio.sleep", new=AsyncMock()):
             # Should not raise
@@ -841,9 +939,7 @@ class TestRefreshAfterApplianceStateChange:
         ap = _make_appliance("app1")
         aps = _make_appliances({"app1": ap})
         coordinator.data = {"appliances": aps}
-        coordinator.api.get_appliance_state = AsyncMock(
-            side_effect=Exception("API error")
-        )
+        coordinator.api.get_appliance_state = AsyncMock(side_effect=Exception("API error"))
         coordinator.async_set_updated_data = MagicMock()
 
         with patch("asyncio.sleep", new=AsyncMock()):
@@ -857,9 +953,7 @@ class TestRefreshAfterApplianceStateChange:
         ap = _make_appliance("app1")
         aps = _make_appliances({"app1": ap})
         coordinator.data = {"appliances": aps}
-        coordinator.api.get_appliance_state = AsyncMock(
-            side_effect=asyncio.CancelledError()
-        )
+        coordinator.api.get_appliance_state = AsyncMock(side_effect=asyncio.CancelledError())
 
         with patch("asyncio.sleep", new=AsyncMock()):
             with pytest.raises(asyncio.CancelledError):
@@ -986,9 +1080,7 @@ class TestCleanupRemovedAppliances:
 
     @pytest.mark.asyncio
     async def test_handles_api_exception_gracefully(self, coordinator):
-        coordinator.api.get_appliances_list = AsyncMock(
-            side_effect=Exception("API failure")
-        )
+        coordinator.api.get_appliances_list = AsyncMock(side_effect=Exception("API failure"))
         # Should not raise
         await coordinator.cleanup_removed_appliances()
 
@@ -1050,9 +1142,7 @@ class TestPerformManualSync:
         coordinator.hass.config_entries.async_reload.assert_called_once_with("entry1")
 
     @pytest.mark.asyncio
-    async def test_raises_ha_error_when_no_config_entry_and_no_capabilities(
-        self, coordinator
-    ):
+    async def test_raises_ha_error_when_no_config_entry_and_no_capabilities(self, coordinator):
         from homeassistant.exceptions import HomeAssistantError
 
         coordinator.data = {"app1": {}}  # no capabilities
@@ -1072,9 +1162,7 @@ class TestPerformManualSync:
         coordinator.data = {"appliances": _apps}
         coordinator.hass.loop.time.return_value = 1_000_000.0
         coordinator._last_manual_sync_time = 0.0
-        coordinator.api.disconnect_websocket = AsyncMock(
-            side_effect=asyncio.TimeoutError
-        )
+        coordinator.api.disconnect_websocket = AsyncMock(side_effect=asyncio.TimeoutError)
         coordinator.listen_websocket = AsyncMock()
 
         with pytest.raises(HomeAssistantError, match="timed out"):
@@ -1112,16 +1200,12 @@ class TestSetupTokenRefreshCallback:
         config_entry.title = "Test"
         config_entry.data = {}
         coordinator.config_entry = config_entry
-        coordinator.hass.config_entries.async_update_entry.side_effect = RuntimeError(
-            "Persist fail"
-        )
+        coordinator.hass.config_entries.async_update_entry.side_effect = RuntimeError("Persist fail")
 
         coordinator.setup_token_refresh_callback()
 
         # Get the registered callback
-        captured_callback = (
-            coordinator.api.set_token_update_callback_with_expiry.call_args[0][0]
-        )
+        captured_callback = coordinator.api.set_token_update_callback_with_expiry.call_args[0][0]
 
         import time as time_module
 
@@ -1147,9 +1231,7 @@ class TestSetupTokenRefreshCallback:
         coordinator.config_entry = config_entry
 
         coordinator.setup_token_refresh_callback()
-        captured_callback = (
-            coordinator.api.set_token_update_callback_with_expiry.call_args[0][0]
-        )
+        captured_callback = coordinator.api.set_token_update_callback_with_expiry.call_args[0][0]
 
         import time as time_module
 
@@ -1190,9 +1272,7 @@ class TestDeferredUpdateAdditional:
         ap = _make_appliance("app1")
         aps = _make_appliances({"app1": ap})
         coordinator.data = {"appliances": aps}
-        coordinator.api.get_appliance_state = AsyncMock(
-            side_effect=RuntimeError("unexpected problem")
-        )
+        coordinator.api.get_appliance_state = AsyncMock(side_effect=RuntimeError("unexpected problem"))
 
         with patch("asyncio.sleep", new=AsyncMock()):
             # Should not raise
@@ -1254,9 +1334,7 @@ class TestProcessIncrementalUpdateTimeToEnd:
         ap.reported_state = {"timeToEnd": 120}
         aps = _make_appliances({"app1": ap})
         coordinator.async_set_updated_data = MagicMock()
-        coordinator._last_time_to_end["app1"] = (
-            120  # old value > TIME_ENTITY_THRESHOLD_HIGH (60)
-        )
+        coordinator._last_time_to_end["app1"] = 120  # old value > TIME_ENTITY_THRESHOLD_HIGH (60)
 
         data = self._incremental_data("app1", "timeToEnd", 0)
         coordinator._process_incremental_update(data, aps)
@@ -1501,8 +1579,6 @@ class TestCleanupRemovedAppliancesEdgeCases:
         """When data exists but tracked_appliances is falsy, returns early."""
         # Data with no appliances key
         coordinator.data = {}  # no "appliances" key → tracked_appliances = None
-        coordinator.api.get_appliances_list = AsyncMock(
-            return_value=[{"applianceId": "app1"}]
-        )
+        coordinator.api.get_appliances_list = AsyncMock(return_value=[{"applianceId": "app1"}])
 
         await coordinator.cleanup_removed_appliances()  # Should not raise

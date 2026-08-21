@@ -131,9 +131,7 @@ class TestAsyncUpdateDataAuthFailureBelowThreshold:
         coordinator._auth_failure_threshold = 5  # High threshold
         coordinator._consecutive_auth_failures = 0
 
-        coordinator.api.get_appliance_state = AsyncMock(
-            side_effect=Exception("401 Unauthorized")
-        )
+        coordinator.api.get_appliance_state = AsyncMock(side_effect=Exception("401 Unauthorized"))
 
         # All appliances failed → UpdateFailed is raised
         with pytest.raises(UpdateFailed):
@@ -150,18 +148,14 @@ class TestAsyncUpdateDataAuthFailureBelowThreshold:
         coordinator._auth_failure_threshold = 10
         coordinator._consecutive_auth_failures = 0
 
-        coordinator.api.get_appliance_state = AsyncMock(
-            side_effect=Exception("unauthorized access")
-        )
+        coordinator.api.get_appliance_state = AsyncMock(side_effect=Exception("unauthorized access"))
 
         with pytest.raises(UpdateFailed):
             await coordinator._async_update_data()
         assert coordinator._consecutive_auth_failures == 1
 
     @pytest.mark.asyncio
-    async def test_auth_error_at_threshold_raises_config_entry_auth_failed(
-        self, coordinator
-    ):
+    async def test_auth_error_at_threshold_raises_config_entry_auth_failed(self, coordinator):
         """Auth error at/above threshold: raises ConfigEntryAuthFailed and creates issue."""
         ap = _make_appliance("app1")
         appliances = _make_appliances({"app1": ap})
@@ -169,9 +163,7 @@ class TestAsyncUpdateDataAuthFailureBelowThreshold:
         coordinator._auth_failure_threshold = 1
         coordinator._consecutive_auth_failures = 0
 
-        coordinator.api.get_appliance_state = AsyncMock(
-            side_effect=Exception("401 Unauthorized")
-        )
+        coordinator.api.get_appliance_state = AsyncMock(side_effect=Exception("401 Unauthorized"))
 
         with patch("homeassistant.helpers.issue_registry.async_create_issue"):
             with pytest.raises(ConfigEntryAuthFailed):
@@ -184,9 +176,7 @@ class TestAsyncUpdateDataAuthFailureBelowThreshold:
         appliances = _make_appliances({"app1": ap})
         coordinator.data = {"appliances": appliances}
 
-        coordinator.api.get_appliance_state = AsyncMock(
-            side_effect=Exception("network timeout")
-        )
+        coordinator.api.get_appliance_state = AsyncMock(side_effect=Exception("network timeout"))
 
         with pytest.raises(UpdateFailed):
             await coordinator._async_update_data()
@@ -199,9 +189,7 @@ class TestAsyncUpdateDataAuthFailureBelowThreshold:
 
 class TestAsyncUpdateDataCameOnline:
     @pytest.mark.asyncio
-    async def test_appliance_transitions_from_disconnected_to_connected(
-        self, coordinator
-    ):
+    async def test_appliance_transitions_from_disconnected_to_connected(self, coordinator):
         """When appliance was disconnected and is now connected, came_online=True."""
         ap = _make_appliance("app1")
         appliances = _make_appliances({"app1": ap})
@@ -272,9 +260,7 @@ class TestAsyncUpdateDataGatherResults:
         coordinator._auth_failure_threshold = 1  # trigger on first failure
         coordinator._consecutive_auth_failures = 0
 
-        coordinator.api.get_appliance_state = AsyncMock(
-            side_effect=Exception("401 Unauthorized")
-        )
+        coordinator.api.get_appliance_state = AsyncMock(side_effect=Exception("401 Unauthorized"))
 
         with patch("homeassistant.helpers.issue_registry.async_create_issue"):
             with pytest.raises(ConfigEntryAuthFailed):
@@ -296,16 +282,12 @@ class TestAsyncUpdateDataGatherResults:
         # The only way is CancelledError which propagates out of _update_single.
         # Instead, test through the existing path where non-auth exception returns (False, False)
         # leading to UpdateFailed.
-        coordinator.api.get_appliance_state = AsyncMock(
-            side_effect=Exception("random error 999")
-        )
+        coordinator.api.get_appliance_state = AsyncMock(side_effect=Exception("random error 999"))
         with pytest.raises(UpdateFailed, match="All appliance updates failed"):
             await coordinator._async_update_data()
 
     @pytest.mark.asyncio
-    async def test_two_appliances_one_succeeds_one_auth_fails_below_threshold(
-        self, coordinator
-    ):
+    async def test_two_appliances_one_succeeds_one_auth_fails_below_threshold(self, coordinator):
         """auth failure below threshold: result is success=True because one succeeded."""
         ap1 = _make_appliance("app1")
         ap2 = _make_appliance("app2")
@@ -331,10 +313,7 @@ class TestAsyncUpdateDataGatherResults:
         result = await coordinator._async_update_data()
         assert result is not None
         # One succeeded, counter reset
-        assert (
-            coordinator._consecutive_auth_failures == 0
-            or coordinator._consecutive_auth_failures == 1
-        )
+        assert coordinator._consecutive_auth_failures == 0 or coordinator._consecutive_auth_failures == 1
 
 
 # ---------------------------------------------------------------------------
@@ -381,9 +360,7 @@ class TestAsyncUpdateDataSseRestart:
                 "properties": {"reported": {}},
             }
         )
-        coordinator.api.disconnect_websocket = AsyncMock(
-            side_effect=Exception("SSE error")
-        )
+        coordinator.api.disconnect_websocket = AsyncMock(side_effect=Exception("SSE error"))
         coordinator.listen_websocket = AsyncMock()
 
         result = await coordinator._async_update_data()
@@ -482,13 +459,50 @@ class TestRenewWebsocket:
         mock_token_manager.is_token_valid.assert_called()
 
     @pytest.mark.asyncio
+    async def test_renew_websocket_token_refresh_false_skips_reconnect(self, coordinator):
+        """When refresh_token returns False, reconnect is skipped and retry delay (15s) is used."""
+        mock_token_manager = MagicMock()
+        mock_token_manager.is_token_valid.return_value = False
+        coordinator.api._token_manager = mock_token_manager
+
+        sleep_delays = []
+
+        async def mock_sleep(delay):
+            sleep_delays.append(delay)
+            if len(sleep_delays) >= 2:
+                raise asyncio.CancelledError()
+
+        coordinator.api.disconnect_websocket = AsyncMock()
+        coordinator.listen_websocket = AsyncMock()
+
+        async def mock_wait_for(coro, timeout=None):
+            if asyncio.iscoroutine(coro):
+                coro.close()
+            return False  # refresh_token returned False
+
+        with patch("asyncio.sleep", side_effect=mock_sleep):
+            with patch("asyncio.wait_for", side_effect=mock_wait_for):
+                try:
+                    await coordinator.renew_websocket()
+                except asyncio.CancelledError:
+                    pass
+
+        # Disconnect and listen must NOT be called when token refresh returns False
+        coordinator.api.disconnect_websocket.assert_not_called()
+        coordinator.listen_websocket.assert_not_called()
+        # First sleep is normal renew_interval (7200s), second sleep on failure is retry delay (15s)
+        assert sleep_delays[0] == coordinator.renew_interval
+        assert sleep_delays[1] == 15.0
+
+    @pytest.mark.asyncio
     async def test_renew_websocket_token_refresh_timeout(self, coordinator):
-        """Token refresh timeout before renewal is handled gracefully."""
+        """Token refresh timeout before renewal uses bounded retry delay (15s)."""
         mock_token_manager = MagicMock()
         mock_token_manager.is_token_valid.return_value = False
         coordinator.api._token_manager = mock_token_manager
 
         call_count = 0
+        sleep_delays = []
 
         async def mock_wait_for(coro, timeout=None):
             nonlocal call_count
@@ -498,14 +512,10 @@ class TestRenewWebsocket:
             if call_count == 1:
                 # First call: token refresh - timeout
                 raise asyncio.TimeoutError()
-            # Second call and beyond: noop
-
-        success_count = 0
 
         async def mock_sleep(delay):
-            nonlocal success_count
-            success_count += 1
-            if success_count >= 1:
+            sleep_delays.append(delay)
+            if len(sleep_delays) >= 2:
                 raise asyncio.CancelledError()
 
         coordinator.api.disconnect_websocket = AsyncMock()
@@ -518,14 +528,18 @@ class TestRenewWebsocket:
                 except asyncio.CancelledError:
                     pass
 
+        assert sleep_delays[0] == coordinator.renew_interval
+        assert sleep_delays[1] == 15.0
+
     @pytest.mark.asyncio
     async def test_renew_websocket_token_refresh_exception(self, coordinator):
-        """Token refresh exception before renewal is handled gracefully."""
+        """Token refresh exception before renewal uses bounded retry delay (15s)."""
         mock_token_manager = MagicMock()
         mock_token_manager.is_token_valid.return_value = False
         coordinator.api._token_manager = mock_token_manager
 
         call_count = 0
+        sleep_delays = []
 
         async def mock_wait_for(coro, timeout=None):
             nonlocal call_count
@@ -536,12 +550,9 @@ class TestRenewWebsocket:
                 # First call: token refresh - exception
                 raise Exception("refresh failed")
 
-        success_count = 0
-
         async def mock_sleep(delay):
-            nonlocal success_count
-            success_count += 1
-            if success_count >= 1:
+            sleep_delays.append(delay)
+            if len(sleep_delays) >= 2:
                 raise asyncio.CancelledError()
 
         coordinator.api.disconnect_websocket = AsyncMock()
@@ -554,9 +565,12 @@ class TestRenewWebsocket:
                 except asyncio.CancelledError:
                     pass
 
+        assert sleep_delays[0] == coordinator.renew_interval
+        assert sleep_delays[1] == 15.0
+
     @pytest.mark.asyncio
     async def test_renew_websocket_too_many_failures_backs_off(self, coordinator):
-        """After max consecutive failures, a 5-minute backoff is applied."""
+        """After max consecutive failures, a 5-minute backoff (300s) is applied."""
         sleep_delays = []
         failure_count = 0
 
@@ -569,7 +583,8 @@ class TestRenewWebsocket:
 
         async def mock_sleep(delay):
             sleep_delays.append(delay)
-            if len(sleep_delays) >= 3:
+            # Initial (renew_interval) + 5 failure retries (15s each) + 1 backoff (300s) = 7 sleeps
+            if len(sleep_delays) >= 7:
                 raise asyncio.CancelledError()
 
         coordinator.api._token_manager = MagicMock()
@@ -581,6 +596,14 @@ class TestRenewWebsocket:
                     await coordinator.renew_websocket()
                 except asyncio.CancelledError:
                     pass
+
+        # First sleep is renew_interval
+        assert sleep_delays[0] == coordinator.renew_interval
+        # Next 4 sleeps (failures 1-4) are WEBSOCKET_RETRY_DELAY (15s)
+        for d in sleep_delays[1:5]:
+            assert d == 15.0
+        # 5th failure triggers 5-minute backoff (300s)
+        assert sleep_delays[5] == 300.0
 
 
 # ---------------------------------------------------------------------------
@@ -755,9 +778,7 @@ class TestSetupEntities:
     @pytest.mark.asyncio
     async def test_setup_entities_cancelled_error_raised(self, coordinator):
         """CancelledError during setup is re-raised."""
-        coordinator.api.get_appliances_list = AsyncMock(
-            side_effect=asyncio.CancelledError()
-        )
+        coordinator.api.get_appliances_list = AsyncMock(side_effect=asyncio.CancelledError())
 
         with pytest.raises(asyncio.CancelledError):
             await coordinator.setup_entities()

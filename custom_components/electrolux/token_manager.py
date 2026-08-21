@@ -238,8 +238,22 @@ class ElectroluxTokenManager(TokenManager):
                 _LOGGER.error(f"[TOKEN-REFRESH] Token refresh failed: {type(e).__name__}: {e}")
                 _LOGGER.debug(f"[TOKEN-REFRESH] Full error details: {error_msg}")
 
-                # Classify transient vs permanent error
-                is_transient = any(
+                # Classify permanent vs transient error
+                # Permanent auth errors are evaluated unconditionally first so compound
+                # messages (e.g. "401 connection reset") strictly trigger reauth latch.
+                is_permanent = any(
+                    kw in error_msg
+                    for kw in [
+                        "401",
+                        "invalid grant",
+                        "invalid_grant",
+                        "forbidden",
+                        "unauthorized",
+                        "invalid token",
+                        "invalid_token",
+                    ]
+                )
+                is_transient = not is_permanent and any(
                     kw in error_msg
                     for kw in [
                         "429",
@@ -255,17 +269,8 @@ class ElectroluxTokenManager(TokenManager):
                         "reset",
                     ]
                 )
-                is_permanent = not is_transient and any(
-                    kw in error_msg
-                    for kw in [
-                        "401",
-                        "invalid grant",
-                        "invalid_grant",
-                        "forbidden",
-                        "unauthorized",
-                        "invalid token",
-                        "invalid_token",
-                    ]
+                _LOGGER.debug(
+                    f"[TOKEN-REFRESH] Error classification: permanent={is_permanent}, transient={is_transient}"
                 )
 
                 if is_permanent:

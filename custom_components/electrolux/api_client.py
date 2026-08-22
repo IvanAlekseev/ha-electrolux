@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import time
 from typing import Any
 
 from electrolux_group_developer_sdk.client.appliance_client import (
@@ -299,27 +298,14 @@ class ElectroluxApiClient:
         try:
             result = await coro
             _LOGGER.debug("_handle_api_call: API call completed successfully")
-            if self.coordinator:
-                self.coordinator._api_connected = True
-                self.coordinator._last_api_success_time = time.time()
-                self.coordinator._last_api_status_code = 200
-                self.coordinator._last_api_error = None
-                if hasattr(self.coordinator, "_listeners"):
-                    self.coordinator.async_update_listeners()
+            if self.coordinator and hasattr(self.coordinator, "record_api_success"):
+                self.coordinator.record_api_success()
             return result
         except Exception as ex:
             _LOGGER.debug(f"_handle_api_call: Exception caught: {ex}")
-            if self.coordinator:
-                self.coordinator._api_connected = False
-                self.coordinator._last_api_error = str(ex)
-                if hasattr(ex, "status"):
-                    self.coordinator._last_api_status_code = ex.status
-                elif hasattr(ex, "status_code"):
-                    self.coordinator._last_api_status_code = ex.status_code
-                else:
-                    self.coordinator._last_api_status_code = None
-                if hasattr(self.coordinator, "_listeners"):
-                    self.coordinator.async_update_listeners()
+            if self.coordinator and hasattr(self.coordinator, "record_api_failure"):
+                status = getattr(ex, "status", getattr(ex, "status_code", None))
+                self.coordinator.record_api_failure(status_code=status, error=str(ex))
             # Check for authentication-related errors
             if is_auth_error(ex):
                 # Trigger token refresh handler by logging the error

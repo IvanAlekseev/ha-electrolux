@@ -71,8 +71,11 @@ WEBSOCKET_RETRY_DELAY = 15.0  # seconds for renewal retry backoff
 API_DISCONNECT_TIMEOUT = 3.0  # seconds for API disconnect
 SSE_RESTART_BASE_COOLDOWN = 15.0  # seconds: base cooldown before first SSE restart attempt
 SSE_RESTART_MAX_COOLDOWN = 1800.0  # 30 minutes: maximum exponential backoff cooldown
-SSE_STALL_THRESHOLD = 300.0  # seconds without SSE messages before forced reconnect
+SSE_STALL_THRESHOLD = 300.0  # seconds without SSE messages during active cycle before forced reconnect
+SSE_IDLE_STALL_THRESHOLD = 3600.0  # 1 hour: quiet threshold when all appliances are idle
 SSE_STALL_CHECK_INTERVAL = 60.0  # seconds between watchdog checks
+API_PROBE_TIMEOUT = 15.0  # seconds timeout for REST health check probe
+API_PROBE_FAILURE_THRESHOLD = 2  # consecutive failed probes required to mark REST API offline
 
 # String constants for data keys
 APPLIANCE_ID_KEY = "applianceId"
@@ -103,6 +106,7 @@ TIME_ENTITY_THRESHOLD_HIGH = 60  # seconds (1 minute — covers minute-granulari
 # This tracks timeToEnd freshness per appliance instead of per connection, and
 # forces a REST poll when it goes stale while the countdown is actually meaningful.
 ACTIVE_TIME_TO_END_STATES = {"RUNNING", "PAUSED", "DELAYED_START"}
+IDLE_APPLIANCE_STATES = {"OFF", "IDLE", "READY_TO_START", "END_OF_CYCLE"}
 TIME_TO_END_STALE_THRESHOLD = 240.0  # seconds without a timeToEnd refresh before polling
 TIME_TO_END_STALL_CHECK_INTERVAL = 60.0  # seconds between staleness checks
 
@@ -166,6 +170,7 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
 
         # Real-time API & SSE stream diagnostic tracking
         self._api_connected: bool = True
+        self._consecutive_api_failures: int = 0
         self._last_api_success_time: float = time.time()
         self._last_api_status_code: int | None = 200
         self._last_api_error: str | None = None
@@ -207,6 +212,11 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
         return self._last_api_error
 
     @property
+    def consecutive_api_failures(self) -> int:
+        """Return count of consecutive failed API checks."""
+        return self._consecutive_api_failures
+
+    @property
     def sse_connected(self) -> bool:
         """Return whether the live SSE event stream is actively connected."""
         return self._sse_connected
@@ -237,6 +247,35 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
         if self._consecutive_sse_restarts == 0:
             return 0.0
         return self._sse_backoff_seconds(self._consecutive_sse_restarts)
+
+    def record_api_success(self) -> None:
+        """Record successful REST API interaction and reset failure counters."""
+        self._consecutive_api_failures = 0
+        self._api_connected = True
+        self._last_api_status_code = 200
+        self._last_api_success_time = time.time()
+        self._last_api_error = None
+        if hasattr(self, "_listeners"):
+            self.async_update_listeners()
+
+    def record_api_failure(
+        self,
+        status_code: int | None = None,
+        error: str | None = None,
+        immediate_disconnect: bool = False,
+    ) -> None:
+        """Record failed REST API interaction with failure debouncing."""
+        self._consecutive_api_failures += 1
+        self._last_api_status_code = status_code
+        self._last_api_error = error
+        if (
+            immediate_disconnect
+            or self._consecutive_api_failures >= API_PROBE_FAILURE_THRESHOLD
+            or (isinstance(status_code, int) and status_code >= 429)
+        ):
+            self._api_connected = False
+        if hasattr(self, "_listeners"):
+            self.async_update_listeners()
 
     async def async_login(self) -> bool:
         """Authenticate with the service."""
@@ -948,23 +987,13 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
         url = "https://api.developer.electrolux.one/ping"
         try:
             session = async_get_clientsession(self.hass)
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=API_PROBE_TIMEOUT)) as resp:
                 if resp.status == 200:
-                    self._api_connected = True
-                    self._last_api_status_code = 200
-                    self._last_api_success_time = time.time()
-                    self._last_api_error = None
+                    self.record_api_success()
                 else:
-                    self._api_connected = False
-                    self._last_api_status_code = resp.status
-                    self._last_api_error = f"HTTP {resp.status}"
+                    self.record_api_failure(status_code=resp.status, error=f"HTTP {resp.status}")
         except Exception as ex:
-            self._api_connected = False
-            self._last_api_status_code = None
-            self._last_api_error = str(ex)
-
-        if hasattr(self, "_listeners"):
-            self.async_update_listeners()
+            self.record_api_failure(status_code=None, error=str(ex))
 
     def _ensure_sse_stall_monitor_started(self) -> None:
         """Ensure the SSE stall watchdog task is running."""
@@ -1954,28 +1983,52 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
             _LOGGER.debug("SSE stall check skipped: no connected appliances")
             return
 
+        # Relax watchdog threshold to 1 hour if all appliances are in known idle states
+        def _get_appliance_state(app: Any) -> str | None:
+            if hasattr(app, "reported_state") and isinstance(app.reported_state, dict):
+                val = app.reported_state.get("applianceState")
+                if val is not None:
+                    return str(val)
+            if hasattr(app, "get_state") and callable(app.get_state):
+                val = app.get_state("applianceState")
+                if val is not None:
+                    return str(val)
+            if hasattr(app, "state") and isinstance(app.state, dict):
+                val = app.state.get("applianceState")
+                if val is not None:
+                    return str(val)
+            return None
+
+        states = [_get_appliance_state(app) for app in app_dict.values()]
+        valid_states = [s.upper().replace(" ", "_") for s in states if s is not None]
+        all_idle = bool(valid_states) and all(s in IDLE_APPLIANCE_STATES for s in valid_states)
+        effective_threshold = SSE_IDLE_STALL_THRESHOLD if all_idle else SSE_STALL_THRESHOLD
+
         now = self.hass.loop.time()
         age = now - self._last_sse_message_time if self._last_sse_message_time > 0 else float("inf")
 
-        if age <= SSE_STALL_THRESHOLD:
+        if age <= effective_threshold:
             _LOGGER.debug(
-                "SSE stall check: healthy (last message %.1fs ago, threshold %.1fs)",
+                "SSE stall check: healthy (last message %.1fs ago, threshold %.1fs, idle=%s)",
                 age,
-                SSE_STALL_THRESHOLD,
+                effective_threshold,
+                all_idle,
             )
             return
 
         if not self._can_restart_sse():
             _LOGGER.debug(
-                "SSE stall detected (%.1fs since last message) but restart cooldown is active",
+                "SSE stall detected (%.1fs since last message, threshold %.1fs) but restart cooldown is active",
                 age,
+                effective_threshold,
             )
             return
 
         _LOGGER.info(
-            "SSE stall detected (%.1fs since last message, threshold %.1fs)",
+            "SSE stall detected (%.1fs since last message, threshold %.1fs, idle=%s)",
             age,
-            SSE_STALL_THRESHOLD,
+            effective_threshold,
+            all_idle,
         )
         self._consecutive_sse_restarts += 1
         self._last_sse_restart_log_count += 1

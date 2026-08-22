@@ -89,6 +89,7 @@ def _make_coordinator():
         coord._pending_state_refresh_tasks = {}
         coord._listeners = {}
         coord._api_connected = True
+        coord._consecutive_api_failures = 0
         coord._last_api_success_time = 1000.0
         coord._last_api_status_code = 200
         coord._last_api_error = None
@@ -102,6 +103,7 @@ def _make_coordinator():
         coord._consecutive_sse_drops = 0
         coord._consecutive_sse_restarts = 0
         coord._last_sse_message_time = 0.0
+        coord._last_sse_restart_time = 0.0
         coord._sse_data_received_since_connect = False
         coord._last_sse_resync_time = 0.0
         coord._pending_sse_resync_task = None
@@ -243,9 +245,11 @@ class TestCoordinatorDiagnosticMethods:
             return_value=mock_session,
         ):
             coordinator = _make_coordinator()
+            coordinator._consecutive_api_failures = 1
             await coordinator._check_api_health()
 
             assert coordinator.api_connected is True
+            assert coordinator.consecutive_api_failures == 0
             assert coordinator.last_api_status_code == 200
             assert coordinator.last_api_error is None
             assert coordinator.last_api_success_time > 0
@@ -253,7 +257,7 @@ class TestCoordinatorDiagnosticMethods:
 
     @pytest.mark.asyncio
     async def test_check_api_health_500_error(self):
-        """Test _check_api_health when /ping returns HTTP 500."""
+        """Test _check_api_health immediately detects HTTP 500 server error."""
         mock_response = AsyncMock()
         mock_response.status = 500
 
@@ -265,15 +269,18 @@ class TestCoordinatorDiagnosticMethods:
             return_value=mock_session,
         ):
             coordinator = _make_coordinator()
-            await coordinator._check_api_health()
+            coordinator._consecutive_api_failures = 0
 
+            # HTTP 500 indicates explicit server outage -> immediately marks disconnected
+            await coordinator._check_api_health()
             assert coordinator.api_connected is False
+            assert coordinator.consecutive_api_failures == 1
             assert coordinator.last_api_status_code == 500
             assert coordinator.last_api_error == "HTTP 500"
 
     @pytest.mark.asyncio
     async def test_check_api_health_network_exception(self):
-        """Test _check_api_health when request encounters network error."""
+        """Test _check_api_health debounces network exceptions."""
         mock_session = MagicMock()
         mock_session.get.side_effect = aiohttp.ClientError("DNS resolution failed")
 
@@ -282,11 +289,73 @@ class TestCoordinatorDiagnosticMethods:
             return_value=mock_session,
         ):
             coordinator = _make_coordinator()
-            await coordinator._check_api_health()
+            coordinator._consecutive_api_failures = 0
 
-            assert coordinator.api_connected is False
+            # 1st failure: debounced
+            await coordinator._check_api_health()
+            assert coordinator.api_connected is True
+            assert coordinator.consecutive_api_failures == 1
             assert coordinator.last_api_status_code is None
             assert "DNS resolution failed" in coordinator.last_api_error
+
+            # 2nd failure: confirms outage
+            await coordinator._check_api_health()
+            assert coordinator.api_connected is False
+            assert coordinator.consecutive_api_failures == 2
+
+    @pytest.mark.asyncio
+    async def test_restart_sse_if_stalled_idle_vs_active(self):
+        """Test _restart_sse_if_stalled uses 3600s for idle appliances and 300s for running."""
+        coordinator = _make_coordinator()
+        coordinator._last_sse_message_time = 500.0
+        coordinator.hass.loop.time.return_value = 1000.0  # 500s elapsed
+
+        mock_task = MagicMock()
+        mock_task.done.return_value = False
+        coordinator.api._sse_task = mock_task
+        coordinator.api.disconnect_websocket = AsyncMock()
+        coordinator.listen_websocket = AsyncMock()
+
+        # Real Appliance structure: applianceState is in reported_state
+        idle_app = MagicMock()
+        idle_app.reported_state = {"applianceState": "OFF"}
+        idle_app.state = {"connectivityState": "connected", "properties": {"reported": {"applianceState": "OFF"}}}
+        idle_app.get_state = MagicMock(return_value="OFF")
+
+        await coordinator._restart_sse_if_stalled({"app1": idle_app})
+        coordinator.api.disconnect_websocket.assert_not_called()
+
+        # Active appliance (RUNNING) in reported_state -> 500s elapsed exceeds 300s active threshold -> restarts
+        active_app = MagicMock()
+        active_app.reported_state = {"applianceState": "RUNNING"}
+        active_app.state = {"connectivityState": "connected"}
+        active_app.get_state = MagicMock(return_value="RUNNING")
+
+        await coordinator._restart_sse_if_stalled({"app1": active_app})
+        coordinator.api.disconnect_websocket.assert_awaited_once()
+        coordinator.listen_websocket.assert_awaited_once()
+
+    def test_coordinator_record_api_methods(self):
+        """Test record_api_success and record_api_failure on coordinator."""
+        coordinator = _make_coordinator()
+        coordinator._consecutive_api_failures = 0
+        coordinator._api_connected = True
+
+        # 1st failure: debounced (remains True)
+        coordinator.record_api_failure(status_code=None, error="DNS timeout")
+        assert coordinator.api_connected is True
+        assert coordinator.consecutive_api_failures == 1
+
+        # 2nd failure: confirms outage (flips to False)
+        coordinator.record_api_failure(status_code=500, error="HTTP 500")
+        assert coordinator.api_connected is False
+        assert coordinator.consecutive_api_failures == 2
+
+        # Success: resets counters immediately
+        coordinator.record_api_success()
+        assert coordinator.api_connected is True
+        assert coordinator.consecutive_api_failures == 0
+        assert coordinator.last_api_status_code == 200
 
     @pytest.mark.asyncio
     async def test_on_sse_connected_resets_diagnostic_state(self):
@@ -323,6 +392,7 @@ class TestCoordinatorDiagnosticMethods:
     @pytest.mark.asyncio
     async def test_close_websocket_cleans_up_api_health_task(self):
         """Test close_websocket cancels the API health monitor task."""
+
         async def _dummy_loop():
             try:
                 await asyncio.sleep(100)
@@ -349,22 +419,18 @@ class TestApiClientDiagnosticHook:
     async def test_handle_api_call_success_records_state(self):
         """Test _handle_api_call records 200 OK on successful calls."""
         mock_coordinator = MagicMock()
-        mock_coordinator._listeners = {}
         client = _make_client(coordinator=mock_coordinator)
 
         coro = AsyncMock(return_value={"status": "ok"})()
         result = await client._handle_api_call(coro)
 
         assert result == {"status": "ok"}
-        assert mock_coordinator._api_connected is True
-        assert mock_coordinator._last_api_status_code == 200
-        assert mock_coordinator._last_api_error is None
+        mock_coordinator.record_api_success.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_handle_api_call_failure_records_error(self):
         """Test _handle_api_call records failure on exception."""
         mock_coordinator = MagicMock()
-        mock_coordinator._listeners = {}
         client = _make_client(coordinator=mock_coordinator)
 
         err = aiohttp.ClientResponseError(
@@ -380,9 +446,7 @@ class TestApiClientDiagnosticHook:
         with pytest.raises(aiohttp.ClientResponseError):
             await client._handle_api_call(_failing_coro())
 
-        assert mock_coordinator._api_connected is False
-        assert mock_coordinator._last_api_status_code == 503
-        assert "503" in mock_coordinator._last_api_error
+        mock_coordinator.record_api_failure.assert_called_once_with(status_code=503, error=str(err))
 
 
 @pytest.mark.asyncio

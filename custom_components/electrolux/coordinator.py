@@ -73,6 +73,7 @@ SSE_RESTART_BASE_COOLDOWN = 15.0  # seconds: base cooldown before first SSE rest
 SSE_RESTART_MAX_COOLDOWN = 1800.0  # 30 minutes: maximum exponential backoff cooldown
 SSE_STALL_THRESHOLD = 300.0  # seconds without SSE messages before considering stream stalled
 SSE_STALL_CHECK_INTERVAL = 60.0  # seconds between watchdog checks
+SSE_DISCONNECT_GRACE_PERIOD = 30.0  # seconds grace period before marking SSE stream offline
 API_PROBE_TIMEOUT = 15.0  # seconds timeout for REST health check probe
 API_PROBE_FAILURE_THRESHOLD = 2  # consecutive failed probes required to mark REST API offline
 
@@ -180,6 +181,7 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
         self._last_sse_event_time: float = 0.0
         self._last_sse_disconnect_reason: str | None = None
         self._consecutive_sse_drops: int = 0
+        self._sse_disconnect_debounce_task: asyncio.Task | None = None
 
         super().__init__(
             hass,
@@ -273,6 +275,41 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
             or (isinstance(status_code, int) and status_code >= 429)
         ):
             self._api_connected = False
+        if hasattr(self, "_listeners"):
+            self.async_update_listeners()
+
+    def record_sse_disconnect(
+        self,
+        reason: str | None = None,
+        is_cancellation: bool = False,
+    ) -> None:
+        """Record SSE stream disconnection with reconnection grace period."""
+        self._consecutive_sse_drops += 1
+        self._last_sse_disconnect_reason = reason or ("Stream cancelled" if is_cancellation else "Stream disconnected")
+        self._sse_connection_state = "reconnecting" if is_cancellation else "disconnected"
+
+        debounce_task = getattr(self, "_sse_disconnect_debounce_task", None)
+        if debounce_task and not debounce_task.done():
+            debounce_task.cancel()
+
+        async def _debounce_disconnect() -> None:
+            try:
+                await asyncio.sleep(SSE_DISCONNECT_GRACE_PERIOD)
+                self._sse_connected = False
+                self._sse_connection_state = "disconnected"
+                if hasattr(self, "_listeners"):
+                    self.async_update_listeners()
+            except asyncio.CancelledError:
+                pass
+
+        if self.hass:
+            self._sse_disconnect_debounce_task = self.hass.async_create_task(
+                _debounce_disconnect(),
+                name=f"{DOMAIN}-sse-disconnect-debounce",
+            )
+        else:
+            self._sse_connected = False
+
         if hasattr(self, "_listeners"):
             self.async_update_listeners()
 
@@ -874,6 +911,11 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
 
     async def _on_sse_connected(self) -> None:
         """Handle actual SSE connection events, including internal SDK reconnects."""
+        debounce_task = getattr(self, "_sse_disconnect_debounce_task", None)
+        if debounce_task and not debounce_task.done():
+            debounce_task.cancel()
+        self._sse_disconnect_debounce_task = None
+
         self._sse_connected = True
         self._sse_connection_state = "streaming"
         self._last_sse_disconnect_reason = None
@@ -1274,6 +1316,12 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
             api_health_monitor_task.cancel()
             await asyncio.gather(api_health_monitor_task, return_exceptions=True)
         self._api_health_monitor_task = None
+
+        debounce_task = getattr(self, "_sse_disconnect_debounce_task", None)
+        if debounce_task and not debounce_task.done():
+            debounce_task.cancel()
+            await asyncio.gather(debounce_task, return_exceptions=True)
+        self._sse_disconnect_debounce_task = None
 
         self._sse_connected = False
         self._sse_connection_state = "disconnected"

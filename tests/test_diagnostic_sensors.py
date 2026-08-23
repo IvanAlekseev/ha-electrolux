@@ -96,6 +96,7 @@ def _make_coordinator():
         coord._api_health_monitor_task = None
         coord._sse_stall_monitor_task = None
         coord._time_to_end_monitor_task = None
+        coord._sse_disconnect_debounce_task = None
         coord._sse_connected = False
         coord._sse_connection_state = "disconnected"
         coord._last_sse_event_time = 0.0
@@ -324,6 +325,58 @@ class TestCoordinatorDiagnosticMethods:
         assert coordinator.api_connected is True
         assert coordinator.consecutive_api_failures == 0
         assert coordinator.last_api_status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_record_sse_disconnect_grace_period(self):
+        """Test record_sse_disconnect grants grace period before flipping sse_connected."""
+        coordinator = _make_coordinator()
+        coordinator._sse_connected = True
+        coordinator._sse_connection_state = "streaming"
+
+        # Mock async_create_task on coordinator.hass
+        created_task = None
+
+        def _fake_create_task(coro, name=None):
+            nonlocal created_task
+            created_task = asyncio.create_task(coro)
+            return created_task
+
+        coordinator.hass.async_create_task = _fake_create_task
+
+        # Disconnect during planned renewal: state becomes reconnecting, but sse_connected remains True
+        coordinator.record_sse_disconnect(reason="Stream cancelled", is_cancellation=True)
+        assert coordinator.sse_connection_state == "reconnecting"
+        assert coordinator.sse_connected is True
+        assert coordinator.consecutive_sse_drops == 1
+        assert coordinator.last_sse_disconnect_reason == "Stream cancelled"
+
+        # Reconnecting within grace period cancels debounce task and keeps sse_connected True
+        coordinator.data = {"appliances": MagicMock()}
+        coordinator.data["appliances"].get_appliances.return_value = {}
+        await coordinator._on_sse_connected()
+        await asyncio.sleep(0)
+        assert coordinator.sse_connected is True
+        assert coordinator.sse_connection_state == "streaming"
+        assert created_task.cancelled() or created_task.done()
+
+    @pytest.mark.asyncio
+    async def test_record_sse_disconnect_outage_expires_grace_period(self):
+        """Test record_sse_disconnect sets sse_connected to False when grace period expires."""
+        coordinator = _make_coordinator()
+        coordinator._sse_connected = True
+
+        def _fake_create_task(coro, name=None):
+            return asyncio.create_task(coro)
+
+        coordinator.hass.async_create_task = _fake_create_task
+
+        with patch("custom_components.electrolux.coordinator.SSE_DISCONNECT_GRACE_PERIOD", 0.01):
+            coordinator.record_sse_disconnect(reason="Connection refused", is_cancellation=False)
+            assert coordinator.sse_connected is True
+
+            await asyncio.sleep(0.05)
+            assert coordinator.sse_connected is False
+            assert coordinator.sse_connection_state == "disconnected"
 
     @pytest.mark.asyncio
     async def test_on_sse_connected_resets_diagnostic_state(self):

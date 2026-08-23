@@ -473,17 +473,14 @@ class ElectroluxApiClient:
             # Add callback to handle task failures
             def _handle_sse_failure(task):
                 if self.coordinator:
-                    self.coordinator._sse_connected = False
-                    self.coordinator._sse_connection_state = "disconnected" if task.cancelled() else "reconnecting"
-                    self.coordinator._consecutive_sse_drops += 1
+                    reason = None
                     if task.cancelled():
-                        self.coordinator._last_sse_disconnect_reason = "Stream cancelled"
+                        reason = "Stream cancelled"
                     elif task.exception() is not None:
-                        self.coordinator._last_sse_disconnect_reason = str(task.exception())
+                        reason = str(task.exception())
                     else:
-                        self.coordinator._last_sse_disconnect_reason = "Stream closed by server"
-                    if hasattr(self.coordinator, "_listeners"):
-                        self.coordinator.async_update_listeners()
+                        reason = "Stream closed by server"
+                    self.coordinator.record_sse_disconnect(reason=reason, is_cancellation=task.cancelled())
 
                 if task.cancelled():
                     _LOGGER.debug(

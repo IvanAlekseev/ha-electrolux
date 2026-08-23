@@ -748,10 +748,9 @@ class TestSendCommand:
                 "custom_components.electrolux.fan.execute_command_with_error_handling",
                 new_callable=AsyncMock,
                 side_effect=AuthenticationError("bad token"),
-            ),
+            ),pytest.raises(AuthenticationError)
         ):
-            with pytest.raises(AuthenticationError):
-                await fan._send_command("Workmode", "Auto", cap)
+            await fan._send_command("Workmode", "Auto", cap)
 
         mock_coord.handle_authentication_error.assert_awaited_once()
 
@@ -1013,10 +1012,9 @@ class TestFanMissingCoverage:
             patch(
                 "custom_components.electrolux.fan.execute_command_with_error_handling",
                 AsyncMock(side_effect=HomeAssistantError("command rejected")),
-            ),
+            ),pytest.raises(HomeAssistantError, match="command rejected")
         ):
-            with pytest.raises(HomeAssistantError, match="command rejected"):
-                await fan._send_command("Workmode", "Auto", cap)
+            await fan._send_command("Workmode", "Auto", cap)
 
 
 # ---------------------------------------------------------------------------

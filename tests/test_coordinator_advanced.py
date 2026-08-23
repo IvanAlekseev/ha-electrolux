@@ -39,9 +39,7 @@ def mock_hass():
     mock_loop.time.return_value = 1_000_000.0
     hass = MagicMock()
     hass.loop = mock_loop
-    hass.async_create_task = MagicMock(
-        side_effect=lambda coro, **kwargs: asyncio.ensure_future(coro)
-    )
+    hass.async_create_task = MagicMock(side_effect=lambda coro, **kwargs: asyncio.ensure_future(coro))
     return hass
 
 
@@ -50,9 +48,7 @@ def mock_api():
     client = MagicMock()
     client._auth_failed = False
     client.disconnect_websocket = AsyncMock()
-    client.get_appliance_state = AsyncMock(
-        return_value={"connectivityState": "connected", "timeToEnd": 0}
-    )
+    client.get_appliance_state = AsyncMock(return_value={"connectivityState": "connected", "timeToEnd": 0})
     client.get_appliances_list = AsyncMock(return_value=[])
     return client
 
@@ -176,11 +172,11 @@ class TestDeferredUpdate:
 
     async def test_reraises_cancelled_error(self, coordinator):
         """deferred_update re-raises CancelledError (sleep interrupted)."""
-        with patch(
-            "asyncio.sleep", new_callable=AsyncMock, side_effect=asyncio.CancelledError
+        with (
+            patch("asyncio.sleep", new_callable=AsyncMock, side_effect=asyncio.CancelledError),
+            pytest.raises(asyncio.CancelledError),
         ):
-            with pytest.raises(asyncio.CancelledError):
-                await coordinator.deferred_update("APP001", delay=60)
+            await coordinator.deferred_update("APP001", delay=60)
 
     async def test_cancelled_error_during_api_call(self, coordinator, mock_api):
         """deferred_update re-raises CancelledError raised by the API."""
@@ -189,9 +185,8 @@ class TestDeferredUpdate:
         coordinator.data = {"appliances": appliances}
         mock_api.get_appliance_state.side_effect = asyncio.CancelledError
 
-        with patch("asyncio.sleep", new_callable=AsyncMock):
-            with pytest.raises(asyncio.CancelledError):
-                await coordinator.deferred_update(appliance_id, delay=5)
+        with patch("asyncio.sleep", new_callable=AsyncMock), pytest.raises(asyncio.CancelledError):
+            await coordinator.deferred_update(appliance_id, delay=5)
 
     async def test_connection_error_raises_update_failed(self, coordinator, mock_api):
         """deferred_update logs ConnectionError and returns (no exception raised)."""
@@ -215,14 +210,12 @@ class TestDeferredUpdate:
             # Should not raise
             await coordinator.deferred_update(appliance_id, delay=5)
 
-    async def test_asyncio_timeout_error_raises_update_failed(
-        self, coordinator, mock_api
-    ):
+    async def test_asyncio_timeout_error_raises_update_failed(self, coordinator, mock_api):
         """deferred_update logs asyncio.TimeoutError and returns (no exception raised)."""
         appliance_id = "APP001"
         appliances = _make_appliances({appliance_id: {}})
         coordinator.data = {"appliances": appliances}
-        mock_api.get_appliance_state.side_effect = asyncio.TimeoutError()
+        mock_api.get_appliance_state.side_effect = TimeoutError()
 
         with patch("asyncio.sleep", new_callable=AsyncMock):
             # Should not raise
@@ -327,9 +320,7 @@ class TestRefreshAfterApplianceStateChange:
             await coordinator._refresh_after_appliance_state_change(appliance_id)
 
         mock_api.get_appliance_state.assert_called_once_with(appliance_id)
-        appliances.get_appliance(appliance_id).update.assert_called_once_with(
-            {"displayTemperatureC": 20}
-        )
+        appliances.get_appliance(appliance_id).update.assert_called_once_with({"displayTemperatureC": 20})
         coordinator.async_set_updated_data.assert_called_once_with(coordinator.data)
 
     async def test_returns_when_data_is_none(self, coordinator, mock_api):
@@ -362,11 +353,11 @@ class TestRefreshAfterApplianceStateChange:
 
     async def test_reraises_cancelled_error(self, coordinator):
         """_refresh_after_appliance_state_change re-raises CancelledError."""
-        with patch(
-            "asyncio.sleep", new_callable=AsyncMock, side_effect=asyncio.CancelledError
+        with (
+            patch("asyncio.sleep", new_callable=AsyncMock, side_effect=asyncio.CancelledError),
+            pytest.raises(asyncio.CancelledError),
         ):
-            with pytest.raises(asyncio.CancelledError):
-                await coordinator._refresh_after_appliance_state_change("APP001")
+            await coordinator._refresh_after_appliance_state_change("APP001")
 
     async def test_cancelled_error_during_api_call(self, coordinator, mock_api):
         """_refresh_after_appliance_state_change re-raises CancelledError from API call."""
@@ -375,9 +366,8 @@ class TestRefreshAfterApplianceStateChange:
         coordinator.data = {"appliances": appliances}
         mock_api.get_appliance_state.side_effect = asyncio.CancelledError
 
-        with patch("asyncio.sleep", new_callable=AsyncMock):
-            with pytest.raises(asyncio.CancelledError):
-                await coordinator._refresh_after_appliance_state_change(appliance_id)
+        with patch("asyncio.sleep", new_callable=AsyncMock), pytest.raises(asyncio.CancelledError):
+            await coordinator._refresh_after_appliance_state_change(appliance_id)
 
     async def test_generic_exception_silently_logged(self, coordinator, mock_api):
         """_refresh_after_appliance_state_change silently catches generic exceptions."""
@@ -438,9 +428,7 @@ class TestCleanupRemovedAppliances:
         # Nothing removed
         assert "APP001" in appliances.appliances
 
-    async def test_returns_when_api_returns_empty_and_we_have_appliances(
-        self, coordinator, mock_api
-    ):
+    async def test_returns_when_api_returns_empty_and_we_have_appliances(self, coordinator, mock_api):
         """cleanup_removed_appliances skips when API returns empty list but we track appliances."""
         mock_api.get_appliances_list.return_value = []
         appliances = _make_appliances({"APP001": {"connectivityState": "connected"}})
@@ -451,18 +439,14 @@ class TestCleanupRemovedAppliances:
         # Should be preserved - empty list is suspicious when we have tracked appliances
         assert "APP001" in appliances.appliances
 
-    async def test_removes_truly_missing_connected_appliance(
-        self, coordinator, mock_api
-    ):
+    async def test_removes_truly_missing_connected_appliance(self, coordinator, mock_api):
         """cleanup_removed_appliances removes a connected appliance absent from API list."""
         mock_api.get_appliances_list.return_value = [
             {"applianceId": "APP002"}  # only APP002 in API
         ]
         appliances = _make_appliances(
             {
-                "APP001": {
-                    "connectivityState": "connected"
-                },  # connected but gone from API → remove
+                "APP001": {"connectivityState": "connected"},  # connected but gone from API → remove
                 "APP002": {"connectivityState": "connected"},  # still in API → keep
             }
         )
@@ -473,9 +457,7 @@ class TestCleanupRemovedAppliances:
         assert "APP001" not in appliances.appliances
         assert "APP002" in appliances.appliances
 
-    async def test_keeps_disconnected_appliance_missing_from_api(
-        self, coordinator, mock_api
-    ):
+    async def test_keeps_disconnected_appliance_missing_from_api(self, coordinator, mock_api):
         """cleanup_removed_appliances keeps disconnected appliances even if missing from API."""
         mock_api.get_appliances_list.return_value = [{"applianceId": "APP002"}]
         appliances = _make_appliances(
@@ -504,9 +486,7 @@ class TestCleanupRemovedAppliances:
 
         await coordinator.cleanup_removed_appliances()
 
-        assert (
-            "APP001" in appliances.appliances
-        )  # kept because connectionState=disconnected
+        assert "APP001" in appliances.appliances  # kept because connectionState=disconnected
 
     async def test_no_missing_appliances(self, coordinator, mock_api):
         """cleanup_removed_appliances does nothing when all tracked appliances are in API list."""
@@ -544,19 +524,13 @@ class TestCleanupRemovedAppliances:
         await coordinator.cleanup_removed_appliances()
         # No exception raised
 
-    async def test_cleans_up_tracking_dicts_for_removed_appliance(
-        self, coordinator, mock_api
-    ):
+    async def test_cleans_up_tracking_dicts_for_removed_appliance(self, coordinator, mock_api):
         """cleanup_removed_appliances purges tracking dictionaries for removed appliances."""
         appliance_id = "APP001"
-        mock_api.get_appliances_list.return_value = (
-            []
-        )  # no appliances! but we have zero tracked too...
+        mock_api.get_appliances_list.return_value = []  # no appliances! but we have zero tracked too...
 
         # Manually: 1 tracked appliance that's connected and missing from API
-        appliances = _make_appliances(
-            {appliance_id: {"connectivityState": "connected"}}
-        )
+        appliances = _make_appliances({appliance_id: {"connectivityState": "connected"}})
         coordinator.data = {"appliances": appliances}
 
         # Seed tracking dicts
@@ -574,9 +548,7 @@ class TestCleanupRemovedAppliances:
         assert appliance_id not in coordinator._last_known_connectivity
         assert appliance_id not in coordinator._last_time_to_end
 
-    async def test_cancels_deferred_tasks_for_removed_appliance(
-        self, coordinator, mock_api
-    ):
+    async def test_cancels_deferred_tasks_for_removed_appliance(self, coordinator, mock_api):
         """cleanup_removed_appliances cancels pending deferred tasks for removed appliances."""
         appliance_id = "APP001"
         mock_api.get_appliances_list.return_value = [{"applianceId": "APP002"}]
@@ -653,9 +625,7 @@ class TestPerformManualSync:
         """perform_manual_sync completes successfully when appliance has capabilities."""
         appliance_id = "APP001"
         coordinator.data = _make_sync_data(True)
-        coordinator.hass.loop.time.return_value = (
-            2_000_000.0  # far in the future past cooldown
-        )
+        coordinator.hass.loop.time.return_value = 2_000_000.0  # far in the future past cooldown
         coordinator._last_manual_sync_time = 0.0
 
         with patch.object(coordinator, "listen_websocket", new_callable=AsyncMock):
@@ -674,9 +644,7 @@ class TestPerformManualSync:
 
         await coordinator.perform_manual_sync(appliance_id, "My Appliance")
 
-        coordinator.hass.config_entries.async_reload.assert_called_once_with(
-            "test_entry_id"
-        )
+        coordinator.hass.config_entries.async_reload.assert_called_once_with("test_entry_id")
         mock_api.disconnect_websocket.assert_not_called()  # reload path exits early
 
     async def test_reload_raises_ha_error_on_failure(self, coordinator, mock_api):
@@ -685,16 +653,12 @@ class TestPerformManualSync:
         coordinator.data = _make_sync_data(False)
         coordinator.hass.loop.time.return_value = 2_000_000.0
         coordinator._last_manual_sync_time = 0.0
-        coordinator.hass.config_entries.async_reload = AsyncMock(
-            side_effect=RuntimeError("reload failed")
-        )
+        coordinator.hass.config_entries.async_reload = AsyncMock(side_effect=RuntimeError("reload failed"))
 
         with pytest.raises(HomeAssistantError, match="Failed to reload integration"):
             await coordinator.perform_manual_sync(appliance_id, "My Appliance")
 
-    async def test_reload_raises_ha_error_when_no_config_entry(
-        self, coordinator, mock_api
-    ):
+    async def test_reload_raises_ha_error_when_no_config_entry(self, coordinator, mock_api):
         """perform_manual_sync raises HomeAssistantError when config_entry is None."""
         appliance_id = "APP001"
         coordinator.data = _make_sync_data(False)
@@ -716,9 +680,7 @@ class TestPerformManualSync:
         with pytest.raises(HomeAssistantError, match="rate limited"):
             await coordinator.perform_manual_sync(appliance_id, "My Appliance")
 
-    async def test_rate_limit_message_includes_remaining_seconds(
-        self, coordinator, mock_api
-    ):
+    async def test_rate_limit_message_includes_remaining_seconds(self, coordinator, mock_api):
         """perform_manual_sync error message includes remaining cooldown seconds."""
         appliance_id = "APP001"
         coordinator.data = _make_sync_data(True)
@@ -730,23 +692,21 @@ class TestPerformManualSync:
 
         assert "30" in str(exc_info.value)  # 60 - 30 = 30 seconds remaining
 
-    async def test_timeout_during_disconnect_raises_ha_error(
-        self, coordinator, mock_api
-    ):
+    async def test_timeout_during_disconnect_raises_ha_error(self, coordinator, mock_api):
         """perform_manual_sync raises HomeAssistantError on asyncio.TimeoutError during disconnect."""
         appliance_id = "APP001"
         coordinator.data = _make_sync_data(True)
         coordinator.hass.loop.time.return_value = 2_000_000.0
         coordinator._last_manual_sync_time = 0.0
-        mock_api.disconnect_websocket.side_effect = asyncio.TimeoutError()
+        mock_api.disconnect_websocket.side_effect = TimeoutError()
 
-        with patch.object(coordinator, "listen_websocket", new_callable=AsyncMock):
-            with pytest.raises(HomeAssistantError, match="Manual sync timed out"):
-                await coordinator.perform_manual_sync(appliance_id, "My Appliance")
+        with (
+            patch.object(coordinator, "listen_websocket", new_callable=AsyncMock),
+            pytest.raises(HomeAssistantError, match="Manual sync timed out"),
+        ):
+            await coordinator.perform_manual_sync(appliance_id, "My Appliance")
 
-    async def test_generic_exception_during_sync_raises_ha_error(
-        self, coordinator, mock_api
-    ):
+    async def test_generic_exception_during_sync_raises_ha_error(self, coordinator, mock_api):
         """perform_manual_sync raises HomeAssistantError on unexpected exception during sync."""
         appliance_id = "APP001"
         coordinator.data = _make_sync_data(True)
@@ -755,9 +715,11 @@ class TestPerformManualSync:
         coordinator.async_request_refresh.side_effect = RuntimeError("unexpected error")
         mock_api.disconnect_websocket.return_value = None
 
-        with patch.object(coordinator, "listen_websocket", new_callable=AsyncMock):
-            with pytest.raises(HomeAssistantError, match="Manual sync failed"):
-                await coordinator.perform_manual_sync(appliance_id, "My Appliance")
+        with (
+            patch.object(coordinator, "listen_websocket", new_callable=AsyncMock),
+            pytest.raises(HomeAssistantError, match="Manual sync failed"),
+        ):
+            await coordinator.perform_manual_sync(appliance_id, "My Appliance")
 
     async def test_lock_prevents_concurrent_sync(self, coordinator, mock_api):
         """perform_manual_sync uses a lock so concurrent calls are serialized."""
@@ -794,9 +756,7 @@ class TestPerformManualSync:
 
         assert coordinator._last_manual_sync_time == 9_999.0
 
-    async def test_appliance_with_no_data_entry_triggers_reload(
-        self, coordinator, mock_api
-    ):
+    async def test_appliance_with_no_data_entry_triggers_reload(self, coordinator, mock_api):
         """perform_manual_sync triggers reload when appliance_id is absent from coordinator.data."""
         appliance_id = "APP001"
         coordinator.data = {}  # appliance_id not in data → capabilities will be empty
@@ -806,9 +766,7 @@ class TestPerformManualSync:
 
         await coordinator.perform_manual_sync(appliance_id, "My Appliance")
 
-        coordinator.hass.config_entries.async_reload.assert_called_once_with(
-            "test_entry_id"
-        )
+        coordinator.hass.config_entries.async_reload.assert_called_once_with("test_entry_id")
 
     async def test_timeout_recovery_attempts_reconnect(self, coordinator, mock_api):
         """perform_manual_sync tries to reconnect websocket after timeout failure."""
@@ -816,9 +774,7 @@ class TestPerformManualSync:
         coordinator.data = _make_sync_data(True)
         coordinator.hass.loop.time.return_value = 2_000_000.0
         coordinator._last_manual_sync_time = 0.0
-        mock_api.disconnect_websocket.side_effect = asyncio.TimeoutError(
-            "disconnect timed out"
-        )
+        mock_api.disconnect_websocket.side_effect = TimeoutError("disconnect timed out")
 
         listen_call_count = 0
 
@@ -826,14 +782,16 @@ class TestPerformManualSync:
             nonlocal listen_call_count
             listen_call_count += 1
 
-        with patch.object(
-            coordinator,
-            "listen_websocket",
-            new_callable=AsyncMock,
-            side_effect=mock_listen,
+        with (
+            patch.object(
+                coordinator,
+                "listen_websocket",
+                new_callable=AsyncMock,
+                side_effect=mock_listen,
+            ),
+            pytest.raises(HomeAssistantError),
         ):
-            with pytest.raises(HomeAssistantError):
-                await coordinator.perform_manual_sync(appliance_id, "My Appliance")
+            await coordinator.perform_manual_sync(appliance_id, "My Appliance")
 
         # Should have attempted recovery via listen_websocket
         assert listen_call_count >= 1
@@ -847,9 +805,7 @@ class TestPerformManualSync:
 class TestDeferredUpdateTaskLifecycle:
     """Verify deferred task tracks created in _schedule_deferred_update integrate with deferred_update."""
 
-    async def test_task_removed_from_tracking_on_completion(
-        self, coordinator, mock_api
-    ):
+    async def test_task_removed_from_tracking_on_completion(self, coordinator, mock_api):
         """A deferred update task removes itself from tracking when done."""
         appliance_id = "APP001"
         appliances = _make_appliances({appliance_id: {"timeToEnd": 1}})

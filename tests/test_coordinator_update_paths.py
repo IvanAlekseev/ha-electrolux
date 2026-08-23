@@ -165,9 +165,11 @@ class TestAsyncUpdateDataAuthFailureBelowThreshold:
 
         coordinator.api.get_appliance_state = AsyncMock(side_effect=Exception("401 Unauthorized"))
 
-        with patch("homeassistant.helpers.issue_registry.async_create_issue"):
-            with pytest.raises(ConfigEntryAuthFailed):
-                await coordinator._async_update_data()
+        with (
+            patch("homeassistant.helpers.issue_registry.async_create_issue"),
+            pytest.raises(ConfigEntryAuthFailed),
+        ):
+            await coordinator._async_update_data()
 
     @pytest.mark.asyncio
     async def test_non_auth_error_all_failed_raises_update_failed(self, coordinator):
@@ -262,9 +264,11 @@ class TestAsyncUpdateDataGatherResults:
 
         coordinator.api.get_appliance_state = AsyncMock(side_effect=Exception("401 Unauthorized"))
 
-        with patch("homeassistant.helpers.issue_registry.async_create_issue"):
-            with pytest.raises(ConfigEntryAuthFailed):
-                await coordinator._async_update_data()
+        with (
+            patch("homeassistant.helpers.issue_registry.async_create_issue"),
+            pytest.raises(ConfigEntryAuthFailed),
+        ):
+            await coordinator._async_update_data()
 
     @pytest.mark.asyncio
     async def test_exception_in_gather_results_added_to_other_errors(self, coordinator):
@@ -306,7 +310,7 @@ class TestAsyncUpdateDataGatherResults:
                     "properties": {"reported": {}},
                 }
             else:
-                raise Exception("401 unauthorized")
+                raise RuntimeError("401 unauthorized")
 
         coordinator.api.get_appliance_state = AsyncMock(side_effect=mixed_state)
 
@@ -391,16 +395,18 @@ class TestRenewWebsocket:
         async def fake_wait_for_timeout(coro, *a, **kw):
             if asyncio.iscoroutine(coro):
                 coro.close()
-            raise asyncio.TimeoutError("timeout")
+            raise TimeoutError("timeout")
 
         # Patch wait_for so the disconnect/reconnect raises TimeoutError (caught internally)
-        with patch("asyncio.sleep", side_effect=mock_sleep):
-            with patch(
+        with (
+            patch("asyncio.sleep", side_effect=mock_sleep),
+            patch(
                 "asyncio.wait_for",
                 side_effect=fake_wait_for_timeout,
-            ):
-                with pytest.raises(asyncio.CancelledError):
-                    await coordinator.renew_websocket()
+            ),
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await coordinator.renew_websocket()
 
         # At least the initial sleep(renew_interval) was called
         assert len(sleep_calls) >= 1
@@ -449,12 +455,14 @@ class TestRenewWebsocket:
             if asyncio.iscoroutine(coro):
                 coro.close()
 
-        with patch("asyncio.sleep", side_effect=mock_sleep):
-            with patch("asyncio.wait_for", side_effect=_fake_wait_for_noop):
-                try:
-                    await coordinator.renew_websocket()
-                except asyncio.CancelledError:
-                    pass
+        with (
+            patch("asyncio.sleep", side_effect=mock_sleep),
+            patch("asyncio.wait_for", side_effect=_fake_wait_for_noop),
+        ):
+            try:
+                await coordinator.renew_websocket()
+            except asyncio.CancelledError:
+                pass
 
         mock_token_manager.is_token_valid.assert_called()
 
@@ -480,12 +488,14 @@ class TestRenewWebsocket:
                 coro.close()
             return False  # refresh_token returned False
 
-        with patch("asyncio.sleep", side_effect=mock_sleep):
-            with patch("asyncio.wait_for", side_effect=mock_wait_for):
-                try:
-                    await coordinator.renew_websocket()
-                except asyncio.CancelledError:
-                    pass
+        with (
+            patch("asyncio.sleep", side_effect=mock_sleep),
+            patch("asyncio.wait_for", side_effect=mock_wait_for),
+        ):
+            try:
+                await coordinator.renew_websocket()
+            except asyncio.CancelledError:
+                pass
 
         # Disconnect and listen must NOT be called when token refresh returns False
         coordinator.api.disconnect_websocket.assert_not_called()
@@ -511,7 +521,8 @@ class TestRenewWebsocket:
                 coro.close()
             if call_count == 1:
                 # First call: token refresh - timeout
-                raise asyncio.TimeoutError()
+                raise TimeoutError()
+            # Second call and beyond: noop
 
         async def mock_sleep(delay):
             sleep_delays.append(delay)
@@ -521,12 +532,14 @@ class TestRenewWebsocket:
         coordinator.api.disconnect_websocket = AsyncMock()
         coordinator.listen_websocket = AsyncMock()
 
-        with patch("asyncio.sleep", side_effect=mock_sleep):
-            with patch("asyncio.wait_for", side_effect=mock_wait_for):
-                try:
-                    await coordinator.renew_websocket()
-                except asyncio.CancelledError:
-                    pass
+        with (
+            patch("asyncio.sleep", side_effect=mock_sleep),
+            patch("asyncio.wait_for", side_effect=mock_wait_for),
+        ):
+            try:
+                await coordinator.renew_websocket()
+            except asyncio.CancelledError:
+                pass
 
         assert sleep_delays[0] == coordinator.renew_interval
         assert sleep_delays[1] == 15.0
@@ -548,7 +561,7 @@ class TestRenewWebsocket:
                 coro.close()
             if call_count == 1:
                 # First call: token refresh - exception
-                raise Exception("refresh failed")
+                raise RuntimeError("refresh failed")
 
         async def mock_sleep(delay):
             sleep_delays.append(delay)
@@ -558,12 +571,14 @@ class TestRenewWebsocket:
         coordinator.api.disconnect_websocket = AsyncMock()
         coordinator.listen_websocket = AsyncMock()
 
-        with patch("asyncio.sleep", side_effect=mock_sleep):
-            with patch("asyncio.wait_for", side_effect=mock_wait_for):
-                try:
-                    await coordinator.renew_websocket()
-                except asyncio.CancelledError:
-                    pass
+        with (
+            patch("asyncio.sleep", side_effect=mock_sleep),
+            patch("asyncio.wait_for", side_effect=mock_wait_for),
+        ):
+            try:
+                await coordinator.renew_websocket()
+            except asyncio.CancelledError:
+                pass
 
         assert sleep_delays[0] == coordinator.renew_interval
         assert sleep_delays[1] == 15.0
@@ -579,7 +594,7 @@ class TestRenewWebsocket:
             failure_count += 1
             if asyncio.iscoroutine(coro):
                 coro.close()
-            raise Exception("renewal error")
+            raise RuntimeError("renewal error")
 
         async def mock_sleep(delay):
             sleep_delays.append(delay)
@@ -590,12 +605,14 @@ class TestRenewWebsocket:
         coordinator.api._token_manager = MagicMock()
         coordinator.api._token_manager.is_token_valid = MagicMock(return_value=True)
 
-        with patch("asyncio.sleep", side_effect=mock_sleep):
-            with patch("asyncio.wait_for", side_effect=fast_fail_wait_for):
-                try:
-                    await coordinator.renew_websocket()
-                except asyncio.CancelledError:
-                    pass
+        with (
+            patch("asyncio.sleep", side_effect=mock_sleep),
+            patch("asyncio.wait_for", side_effect=fast_fail_wait_for),
+        ):
+            try:
+                await coordinator.renew_websocket()
+            except asyncio.CancelledError:
+                pass
 
         # First sleep is renew_interval
         assert sleep_delays[0] == coordinator.renew_interval
@@ -635,9 +652,11 @@ class TestCloseWebsocket:
             if asyncio.iscoroutine(coro):
                 await coro
 
-        with patch("asyncio.gather", new=_fake_gather_close):
-            with patch("asyncio.wait_for", side_effect=_fake_wait_for_noop):
-                await coordinator.close_websocket()
+        with (
+            patch("asyncio.gather", new=_fake_gather_close),
+            patch("asyncio.wait_for", side_effect=_fake_wait_for_noop),
+        ):
+            await coordinator.close_websocket()
 
         task1.cancel.assert_called_once()
         task2.cancel.assert_not_called()
@@ -662,9 +681,11 @@ class TestCloseWebsocket:
             if asyncio.iscoroutine(coro):
                 await coro
 
-        with patch("asyncio.gather", new=_fake_gather_close):
-            with patch("asyncio.wait_for", side_effect=_fake_wait_for_noop):
-                await coordinator.close_websocket()
+        with (
+            patch("asyncio.gather", new=_fake_gather_close),
+            patch("asyncio.wait_for", side_effect=_fake_wait_for_noop),
+        ):
+            await coordinator.close_websocket()
 
         task.cancel.assert_called_once()
 
@@ -683,11 +704,13 @@ class TestCloseWebsocket:
         async def fake_wait_for_timeout(coro, *a, **kw):
             if asyncio.iscoroutine(coro):
                 await coro
-            raise asyncio.TimeoutError()
+            raise TimeoutError()
 
-        with patch("asyncio.gather", new=_fake_gather_close):
-            with patch("asyncio.wait_for", side_effect=fake_wait_for_timeout):
-                await coordinator.close_websocket()  # Should not raise
+        with (
+            patch("asyncio.gather", new=_fake_gather_close),
+            patch("asyncio.wait_for", side_effect=fake_wait_for_timeout),
+        ):
+            await coordinator.close_websocket()  # Should not raise
 
     @pytest.mark.asyncio
     async def test_close_websocket_api_close_exception_logged(self, coordinator):
@@ -704,11 +727,13 @@ class TestCloseWebsocket:
         async def fake_wait_for_exception(coro, *a, **kw):
             if asyncio.iscoroutine(coro):
                 await coro
-            raise Exception("close failed")
+            raise RuntimeError("close failed")
 
-        with patch("asyncio.gather", new=_fake_gather_close):
-            with patch("asyncio.wait_for", side_effect=fake_wait_for_exception):
-                await coordinator.close_websocket()  # Should not raise
+        with (
+            patch("asyncio.gather", new=_fake_gather_close),
+            patch("asyncio.wait_for", side_effect=fake_wait_for_exception),
+        ):
+            await coordinator.close_websocket()  # Should not raise
 
     @pytest.mark.asyncio
     async def test_close_websocket_with_renew_task(self, coordinator):
@@ -729,9 +754,11 @@ class TestCloseWebsocket:
             if asyncio.iscoroutine(coro):
                 await coro
 
-        with patch("asyncio.gather", new=_fake_gather_close):
-            with patch("asyncio.wait_for", side_effect=fake_wait_for_close):
-                await coordinator.close_websocket()
+        with (
+            patch("asyncio.gather", new=_fake_gather_close),
+            patch("asyncio.wait_for", side_effect=fake_wait_for_close),
+        ):
+            await coordinator.close_websocket()
 
         renew_task.cancel.assert_called_once()
 
@@ -765,7 +792,7 @@ class TestSetupEntities:
             for coro in coros:
                 if asyncio.iscoroutine(coro):
                     coro.close()
-            raise asyncio.TimeoutError()
+            raise TimeoutError()
 
         # After removing the broken cancel-loop dead code, a timeout now
         # logs a warning and allows setup_entities to return normally.

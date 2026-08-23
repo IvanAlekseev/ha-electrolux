@@ -56,9 +56,7 @@ class TestElectroluxNumber:
             icon="mdi:test",
         )
         entity.hass = mock_coordinator.hass  # Set hass for the entity
-        entity.appliance_status = {
-            "properties": {"reported": {"testAttr": 75, "remoteControl": "ENABLED"}}
-        }
+        entity.appliance_status = {"properties": {"reported": {"testAttr": 75, "remoteControl": "ENABLED"}}}
         entity.reported_state = {"testAttr": 75, "remoteControl": "ENABLED"}
         return entity
 
@@ -204,9 +202,7 @@ class TestElectroluxNumber:
             icon="mdi:timelapse",
         )
         entity.hass = mock_coordinator.hass  # Set hass for the entity
-        entity.appliance_status = {
-            "properties": {"reported": {"targetDuration": 3600}}
-        }  # 3600 seconds
+        entity.appliance_status = {"properties": {"reported": {"targetDuration": 3600}}}  # 3600 seconds
         entity.reported_state = {"targetDuration": 3600}
         assert entity.native_value == 60  # 60 minutes
 
@@ -236,9 +232,7 @@ class TestElectroluxNumber:
             icon="mdi:clock-start",
         )
         entity.hass = mock_coordinator.hass  # Set hass for the entity
-        entity.appliance_status = {
-            "properties": {"reported": {"startTime": 1800}}
-        }  # 1800 seconds
+        entity.appliance_status = {"properties": {"reported": {"startTime": 1800}}}  # 1800 seconds
         entity.reported_state = {"startTime": 1800}
         assert entity.native_value == 30  # 30 minutes
 
@@ -283,9 +277,7 @@ class TestElectroluxNumber:
             icon="mdi:thermometer-probe",
         )
         entity.hass = mock_coordinator.hass  # Set hass for the entity
-        entity.appliance_status = {
-            "properties": {"reported": {"foodProbeInsertionState": "NOT_INSERTED"}}
-        }
+        entity.appliance_status = {"properties": {"reported": {"foodProbeInsertionState": "NOT_INSERTED"}}}
         entity.reported_state = {"foodProbeInsertionState": "NOT_INSERTED"}
         assert entity.native_value == 0.0
 
@@ -426,9 +418,7 @@ class TestElectroluxNumber:
 
     def test_native_step_program_specific(self, number_entity):
         """Test step value from program-specific constraints."""
-        number_entity._get_program_constraint = MagicMock(
-            side_effect=lambda key: 5 if key == "step" else None
-        )
+        number_entity._get_program_constraint = MagicMock(side_effect=lambda key: 5 if key == "step" else None)
         assert number_entity.native_step == 5
 
     def test_native_step_time_conversion(self, mock_coordinator):
@@ -458,9 +448,7 @@ class TestElectroluxNumber:
         assert entity.native_step == 5  # 300 seconds = 5 minutes
 
     @pytest.mark.asyncio
-    async def test_async_set_native_value_basic(
-        self, mock_coordinator, mock_capability
-    ):
+    async def test_async_set_native_value_basic(self, mock_coordinator, mock_capability):
         """Test basic value setting."""
         entity = ElectroluxNumber(
             coordinator=mock_coordinator,
@@ -481,22 +469,18 @@ class TestElectroluxNumber:
         entity.api = MagicMock()
         entity.api.execute_appliance_command = AsyncMock()  # Make it async
         entity._rate_limit_command = AsyncMock()
-        entity.appliance_status = {
-            "properties": {"reported": {"remoteControl": "ENABLED"}}
-        }
+        entity.appliance_status = {"properties": {"reported": {"remoteControl": "ENABLED"}}}
 
         # Mock async_write_ha_state to avoid hass requirement
         write_mock = MagicMock()
-        setattr(entity, "async_write_ha_state", write_mock)
+        object.__setattr__(entity, "async_write_ha_state", write_mock)
 
         # Check that the method returns True
         assert entity._is_supported_by_program()
 
         with (
             patch.object(entity, "_is_supported_by_program", return_value=True),
-            patch(
-                "custom_components.electrolux.number.format_command_for_appliance"
-            ) as mock_format,
+            patch("custom_components.electrolux.number.format_command_for_appliance") as mock_format,
             patch.object(entity, "coordinator") as mock_coord,
         ):
             mock_coord.async_request_refresh = AsyncMock()
@@ -504,15 +488,11 @@ class TestElectroluxNumber:
             mock_format.return_value = 42
             await entity.async_set_native_value(42.0)
 
-            mock_format.assert_called_once_with(
-                entity.capability, "targetDuration", 42.0
-            )
+            mock_format.assert_called_once_with(entity.capability, "targetDuration", 42.0)
             entity.api.execute_appliance_command.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_async_set_native_value_food_probe_not_inserted(
-        self, mock_coordinator
-    ):
+    async def test_async_set_native_value_food_probe_not_inserted(self, mock_coordinator):
         """Test setting food probe temperature when not inserted raises error."""
         capability = {"access": "readwrite", "type": "temperature"}
         entity = ElectroluxNumber(
@@ -546,9 +526,7 @@ class TestElectroluxNumber:
             await number_entity.async_set_native_value(50.0)
 
     @pytest.mark.asyncio
-    async def test_async_set_native_value_target_temperature_not_supported_by_program(
-        self, mock_coordinator
-    ):
+    async def test_async_set_native_value_target_temperature_not_supported_by_program(self, mock_coordinator):
         """Test setting target temperature when not supported by program shows notification and doesn't proceed."""
         capability = {"access": "readwrite", "type": "temperature"}
         entity = ElectroluxNumber(
@@ -606,20 +584,20 @@ class TestElectroluxNumber:
         }
         entity._is_supported_by_program = MagicMock(return_value=False)
         entity.api = MagicMock()
-        entity.api.execute_appliance_command = AsyncMock(
-            return_value={"result": "success"}
-        )
+        entity.api.execute_appliance_command = AsyncMock(return_value={"result": "success"})
         entity._rate_limit_command = AsyncMock()
 
         # Mock _get_converted_constraint to return 30.0 for min
-        with patch.object(entity, "_get_converted_constraint", return_value=30.0):
+        with (
+            patch.object(entity, "_get_converted_constraint", return_value=30.0),
             # Mock async_write_ha_state to avoid entity setup issues
-            with patch.object(entity, "async_write_ha_state"):
-                with pytest.raises(
-                    HomeAssistantError,
-                    match="not supported by program",
-                ):
-                    await entity.async_set_native_value(70.0)
+            patch.object(entity, "async_write_ha_state"),
+            pytest.raises(
+                HomeAssistantError,
+                match="not supported by program",
+            ),
+        ):
+            await entity.async_set_native_value(70.0)
         capability = {"access": "readwrite", "type": "number", "max": 7200, "step": 60}
         entity = ElectroluxNumber(
             coordinator=mock_coordinator,
@@ -641,17 +619,13 @@ class TestElectroluxNumber:
         entity.api.execute_appliance_command = AsyncMock()  # Make it async
         entity._rate_limit_command = AsyncMock()
         entity._is_supported_by_program = MagicMock(return_value=True)
-        entity.appliance_status = {
-            "properties": {"reported": {"remoteControl": "ENABLED"}}
-        }
+        entity.appliance_status = {"properties": {"reported": {"remoteControl": "ENABLED"}}}
 
         # Mock async_write_ha_state to avoid hass requirement
         write_mock = MagicMock()
-        setattr(entity, "async_write_ha_state", write_mock)
+        object.__setattr__(entity, "async_write_ha_state", write_mock)
 
-        with patch(
-            "custom_components.electrolux.number.format_command_for_appliance"
-        ) as mock_format:
+        with patch("custom_components.electrolux.number.format_command_for_appliance") as mock_format:
             mock_format.return_value = 1800  # 30 minutes in seconds
             await entity.async_set_native_value(30.0)  # 30 minutes
 
@@ -670,16 +644,12 @@ class TestElectroluxNumber:
         number_entity._is_supported_by_program = MagicMock(return_value=True)
         assert number_entity.available
 
-    def test_available_property_always_available_regardless_of_program_support(
-        self, number_entity
-    ):
+    def test_available_property_always_available_regardless_of_program_support(self, number_entity):
         """Test that entities are always available regardless of program support (Entity Availability Rules)."""
         number_entity._is_supported_by_program = MagicMock(return_value=False)
         assert number_entity.available  # Should remain available
 
-    def test_available_property_target_temperature_supported_by_program(
-        self, mock_coordinator
-    ):
+    def test_available_property_target_temperature_supported_by_program(self, mock_coordinator):
         """Test that target temperature is available when supported by program."""
         capability = {"access": "readwrite", "type": "temperature"}
         entity = ElectroluxNumber(
@@ -698,15 +668,11 @@ class TestElectroluxNumber:
             icon="mdi:thermometer",
         )
         entity.hass = mock_coordinator.hass  # Set hass for the entity
-        entity.appliance_status = {
-            "properties": {"reported": {"remoteControl": "ENABLED"}}
-        }
+        entity.appliance_status = {"properties": {"reported": {"remoteControl": "ENABLED"}}}
         entity._is_supported_by_program = MagicMock(return_value=True)
         assert entity.available
 
-    def test_available_property_target_temperature_not_supported_by_program(
-        self, mock_coordinator
-    ):
+    def test_available_property_target_temperature_not_supported_by_program(self, mock_coordinator):
         """Test that target temperature is always available (shows 0 when not supported by program)."""
         capability = {"access": "readwrite", "type": "temperature"}
         entity = ElectroluxNumber(
@@ -725,16 +691,12 @@ class TestElectroluxNumber:
             icon="mdi:thermometer",
         )
         entity.hass = mock_coordinator.hass  # Set hass for the entity
-        entity.appliance_status = {
-            "properties": {"reported": {"remoteControl": "ENABLED"}}
-        }
+        entity.appliance_status = {"properties": {"reported": {"remoteControl": "ENABLED"}}}
         entity._is_supported_by_program = MagicMock(return_value=False)
         # targetTemperatureC is now always available regardless of program support
         assert entity.available
 
-    def test_available_property_food_probe_temperature_supported_by_program(
-        self, mock_coordinator
-    ):
+    def test_available_property_food_probe_temperature_supported_by_program(self, mock_coordinator):
         """Test that food probe temperature is available when supported by program."""
         capability = {"access": "readwrite", "type": "temperature"}
         entity = ElectroluxNumber(
@@ -753,15 +715,11 @@ class TestElectroluxNumber:
             icon="mdi:thermometer-probe",
         )
         entity.hass = mock_coordinator.hass  # Set hass for the entity
-        entity.appliance_status = {
-            "properties": {"reported": {"remoteControl": "ENABLED"}}
-        }
+        entity.appliance_status = {"properties": {"reported": {"remoteControl": "ENABLED"}}}
         entity._is_supported_by_program = MagicMock(return_value=True)
         assert entity.available
 
-    def test_available_property_food_probe_temperature_not_supported_by_program(
-        self, mock_coordinator
-    ):
+    def test_available_property_food_probe_temperature_not_supported_by_program(self, mock_coordinator):
         """Test that food probe temperature is always available (shows 0 when not supported by program)."""
         capability = {"access": "readwrite", "type": "temperature"}
         entity = ElectroluxNumber(
@@ -780,9 +738,7 @@ class TestElectroluxNumber:
             icon="mdi:thermometer-probe",
         )
         entity.hass = mock_coordinator.hass  # Set hass for the entity
-        entity.appliance_status = {
-            "properties": {"reported": {"remoteControl": "ENABLED"}}
-        }
+        entity.appliance_status = {"properties": {"reported": {"remoteControl": "ENABLED"}}}
         # targetFoodProbeTemperatureC is now always available regardless of program support
         assert entity.available
 
@@ -913,11 +869,9 @@ class TestNumberAsyncSetNativeValueAdvanced:
         entity.api = MagicMock()
         entity.api.execute_appliance_command = AsyncMock(return_value={"result": "ok"})
         entity._rate_limit_command = AsyncMock()
-        entity.appliance_status = {
-            "properties": {"reported": {"remoteControl": "ENABLED"}}
-        }
+        entity.appliance_status = {"properties": {"reported": {"remoteControl": "ENABLED"}}}
         write_mock = MagicMock()
-        setattr(entity, "async_write_ha_state", write_mock)
+        object.__setattr__(entity, "async_write_ha_state", write_mock)
         return entity
 
     @pytest.mark.asyncio
@@ -982,9 +936,7 @@ class TestNumberAsyncSetNativeValueAdvanced:
         assert "commands" in call_args[1]
 
     @pytest.mark.asyncio
-    async def test_set_native_value_dam_with_other_entity_source(
-        self, mock_coordinator
-    ):
+    async def test_set_native_value_dam_with_other_entity_source(self, mock_coordinator):
         """DAM appliance with non-standard entity_source builds nested command."""
         entity = self._make_entity(
             mock_coordinator,
@@ -1026,9 +978,7 @@ class TestNumberAsyncSetNativeValueAdvanced:
         assert "commands" in call_args[1]
 
     @pytest.mark.asyncio
-    async def test_set_native_value_dam_user_selections_missing_program_uid(
-        self, mock_coordinator
-    ):
+    async def test_set_native_value_dam_user_selections_missing_program_uid(self, mock_coordinator):
         """DAM appliance with userSelections source but no programUID raises error."""
         entity = self._make_entity(
             mock_coordinator,
@@ -1048,17 +998,17 @@ class TestNumberAsyncSetNativeValueAdvanced:
             }
         }
 
-        with patch(
-            "custom_components.electrolux.number.format_command_for_appliance",
-            return_value=30,
+        with (
+            patch(
+                "custom_components.electrolux.number.format_command_for_appliance",
+                return_value=30,
+            ),
+            pytest.raises(HomeAssistantError, match="state is incomplete"),
         ):
-            with pytest.raises(HomeAssistantError, match="state is incomplete"):
-                await entity.async_set_native_value(30.0)
+            await entity.async_set_native_value(30.0)
 
     @pytest.mark.asyncio
-    async def test_set_native_value_food_probe_locked_by_program(
-        self, mock_coordinator
-    ):
+    async def test_set_native_value_food_probe_locked_by_program(self, mock_coordinator):
         """Food probe entity locked but INSERTED and supported → food_probe_locked error."""
         capability = {
             "access": "readwrite",
@@ -1097,9 +1047,7 @@ class TestNumberAsyncSetNativeValueAdvanced:
             await entity.async_set_native_value(100.0)
 
     @pytest.mark.asyncio
-    async def test_set_native_value_authentication_error_handled(
-        self, mock_coordinator
-    ):
+    async def test_set_native_value_authentication_error_handled(self, mock_coordinator):
         """AuthenticationError from API triggers coordinator.handle_authentication_error."""
         from custom_components.electrolux.util import AuthenticationError
 
@@ -1140,9 +1088,9 @@ class TestNumberAsyncSetNativeValueAdvanced:
                 "custom_components.electrolux.number.format_command_for_appliance",
                 return_value=50,
             ),
+            pytest.raises(HomeAssistantError),
         ):
-            with pytest.raises(HomeAssistantError):
-                await entity.async_set_native_value(50.0)
+            await entity.async_set_native_value(50.0)
 
 
 class TestNumberMissingCoverage:
@@ -1198,11 +1146,9 @@ class TestNumberMissingCoverage:
         entity.api = MagicMock()
         entity.api.execute_appliance_command = AsyncMock(return_value={"result": "ok"})
         entity._rate_limit_command = AsyncMock()
-        entity.appliance_status = {
-            "properties": {"reported": {"remoteControl": "ENABLED"}}
-        }
+        entity.appliance_status = {"properties": {"reported": {"remoteControl": "ENABLED"}}}
         write_mock = MagicMock()
-        setattr(entity, "async_write_ha_state", write_mock)
+        object.__setattr__(entity, "async_write_ha_state", write_mock)
         return entity
 
     # ------------------------------------------------------------------ #
@@ -1225,9 +1171,7 @@ class TestNumberMissingCoverage:
     # Lines 180-186: device_class — base _device_class is NumberDeviceClass / "temperature"
     # ------------------------------------------------------------------ #
 
-    def test_device_class_base_device_class_is_number_device_class(
-        self, mock_coordinator
-    ):
+    def test_device_class_base_device_class_is_number_device_class(self, mock_coordinator):
         """When _device_class is a NumberDeviceClass (no catalog), it's returned (lines 180-182)."""
         from homeassistant.components.number import NumberDeviceClass as NDC
 
@@ -1297,9 +1241,7 @@ class TestNumberMissingCoverage:
 
         assert result == 180.0
 
-    def test_native_value_uses_capability_default_for_temp_when_no_program_default(
-        self, mock_coordinator
-    ):
+    def test_native_value_uses_capability_default_for_temp_when_no_program_default(self, mock_coordinator):
         """When targetTemperatureC has None program default, falls back to capability.get('default') (line 210)."""
         entity = self._make_entity(
             mock_coordinator,
@@ -1337,9 +1279,7 @@ class TestNumberMissingCoverage:
     # Lines 227-246: native_value — capability default, TIME_INVALID_OR_NOT_SET, targetDuration fallback
     # ------------------------------------------------------------------ #
 
-    def test_native_value_uses_capability_default_when_value_is_none(
-        self, mock_coordinator
-    ):
+    def test_native_value_uses_capability_default_when_value_is_none(self, mock_coordinator):
         """When value is None (non-temp control), falls back to capability.get('default') (lines 227-228)."""
 
         entity = self._make_entity(
@@ -1483,9 +1423,7 @@ class TestNumberMissingCoverage:
             entity_attr="targetFoodProbeTemperatureC",
             capability={"type": "temperature", "min": 40, "max": 99},
         )
-        entity.reported_state = {
-            "foodProbeInsertionState": FOOD_PROBE_STATE_NOT_INSERTED
-        }
+        entity.reported_state = {"foodProbeInsertionState": FOOD_PROBE_STATE_NOT_INSERTED}
         entity._is_supported_by_program = MagicMock(return_value=True)
         entity._get_program_constraint = MagicMock(return_value=None)
         assert entity._is_locked_by_program() is True
@@ -1497,9 +1435,7 @@ class TestNumberMissingCoverage:
     def test_is_locked_by_program_zero_step(self, mock_coordinator):
         """Entity locked when program step == 0 (line 345)."""
         entity = self._make_entity(mock_coordinator, entity_attr="targetTemperatureC")
-        entity._get_program_constraint = MagicMock(
-            side_effect=lambda k: {"min": 40.0, "max": 60.0, "step": 0.0}.get(k)
-        )
+        entity._get_program_constraint = MagicMock(side_effect=lambda k: {"min": 40.0, "max": 60.0, "step": 0.0}.get(k))
         entity._is_supported_by_program = MagicMock(return_value=True)
         assert entity._is_locked_by_program() is True
 
@@ -1533,9 +1469,7 @@ class TestNumberMissingCoverage:
     # Line 419: _get_converted_constraint — catalog entry non-numeric warns + returns
     # ------------------------------------------------------------------ #
 
-    def test_get_converted_constraint_catalog_non_numeric_warns_and_falls_through(
-        self, mock_coordinator
-    ):
+    def test_get_converted_constraint_catalog_non_numeric_warns_and_falls_through(self, mock_coordinator):
         """When catalog val is non-numeric, warns and falls through to capability (line 419)."""
         entity = self._make_entity(
             mock_coordinator,
@@ -1555,9 +1489,7 @@ class TestNumberMissingCoverage:
     # Lines 429-444: _get_converted_constraint — catalog converts seconds to minutes for time entities
     # ------------------------------------------------------------------ #
 
-    def test_get_converted_constraint_catalog_time_entity_converts_to_minutes(
-        self, mock_coordinator
-    ):
+    def test_get_converted_constraint_catalog_time_entity_converts_to_minutes(self, mock_coordinator):
         """Time entity: catalog value (seconds) is converted to minutes for UI (lines 429-444)."""
         from homeassistant.const import UnitOfTime
 
@@ -1595,9 +1527,7 @@ class TestNumberMissingCoverage:
         result = entity._get_converted_constraint("max")
         assert result == float(TEMP_OVEN_MAX_F)
 
-    def test_get_converted_constraint_food_probe_temp_c_fallback(
-        self, mock_coordinator
-    ):
+    def test_get_converted_constraint_food_probe_temp_c_fallback(self, mock_coordinator):
         """targetFoodProbeTemperatureC falls back to TEMP_PROBE_MAX_C (line 487)."""
         from custom_components.electrolux.const import TEMP_PROBE_MAX_C
 
@@ -1614,9 +1544,7 @@ class TestNumberMissingCoverage:
         result = entity._get_converted_constraint("max")
         assert result == float(TEMP_PROBE_MAX_C)
 
-    def test_get_converted_constraint_food_probe_temp_f_fallback(
-        self, mock_coordinator
-    ):
+    def test_get_converted_constraint_food_probe_temp_f_fallback(self, mock_coordinator):
         """targetFoodProbeTemperatureF falls back to TEMP_PROBE_MAX_F (line 489)."""
         from custom_components.electrolux.const import TEMP_PROBE_MAX_F
 
@@ -1637,9 +1565,7 @@ class TestNumberMissingCoverage:
     # Line 559: _get_converted_constraint step — temp control uses TEMP_OVEN_STEP
     # ------------------------------------------------------------------ #
 
-    def test_get_converted_constraint_step_for_temp_control_uses_oven_step(
-        self, mock_coordinator
-    ):
+    def test_get_converted_constraint_step_for_temp_control_uses_oven_step(self, mock_coordinator):
         """Step for targetTemperatureC/F uses TEMP_OVEN_STEP (line 559)."""
         from custom_components.electrolux.const import TEMP_OVEN_STEP
 
@@ -1649,9 +1575,7 @@ class TestNumberMissingCoverage:
         )
         entity._is_locked_by_program = MagicMock(return_value=False)
         entity._catalog_entry = None
-        entity._get_program_constraint = MagicMock(
-            return_value=0
-        )  # step=0 triggers fallback
+        entity._get_program_constraint = MagicMock(return_value=0)  # step=0 triggers fallback
 
         result = entity._get_converted_constraint("step")
         assert result == TEMP_OVEN_STEP
@@ -1671,9 +1595,7 @@ class TestNumberMissingCoverage:
         )
         entity._is_locked_by_program = MagicMock(return_value=False)
         entity._catalog_entry = None
-        entity._get_program_constraint = MagicMock(
-            return_value=0
-        )  # step=0 triggers fallback
+        entity._get_program_constraint = MagicMock(return_value=0)  # step=0 triggers fallback
 
         result = entity._get_converted_constraint("step")
         assert result == DEFAULT_NUMBER_STEP
@@ -1748,9 +1670,7 @@ class TestNumberMissingCoverage:
         assert "commands" in call_args[1]
 
     @pytest.mark.asyncio
-    async def test_set_value_latam_user_selections_empty_returns_early(
-        self, mock_coordinator
-    ):
+    async def test_set_value_latam_user_selections_empty_returns_early(self, mock_coordinator):
         """When latamUserSelections is empty, method returns without command (line 675)."""
         entity = self._make_entity(
             mock_coordinator,
@@ -1785,9 +1705,7 @@ class TestNumberMissingCoverage:
     # ------------------------------------------------------------------ #
 
     @pytest.mark.asyncio
-    async def test_set_value_dam_user_selections_with_valid_program_uid(
-        self, mock_coordinator
-    ):
+    async def test_set_value_dam_user_selections_with_valid_program_uid(self, mock_coordinator):
         """DAM + userSelections with valid programUID sends full userSelections command (line 706)."""
         entity = self._make_entity(
             mock_coordinator,
@@ -1847,9 +1765,7 @@ class TestNumberMissingCoverage:
         from homeassistant.components.number import NumberMode
 
         entity = self._make_entity(mock_coordinator)
-        with patch.object(
-            type(entity), "native_step", new_callable=PropertyMock, return_value=0
-        ):
+        with patch.object(type(entity), "native_step", new_callable=PropertyMock, return_value=0):
             assert entity.mode == NumberMode.SLIDER
 
     def test_mode_slider_when_max_is_none(self, mock_coordinator):
@@ -1892,9 +1808,7 @@ class TestNumberMissingCoverage:
                 new_callable=PropertyMock,
                 return_value=1439,
             ),
-            patch.object(
-                type(entity), "native_step", new_callable=PropertyMock, return_value=1
-            ),
+            patch.object(type(entity), "native_step", new_callable=PropertyMock, return_value=1),
         ):
             assert entity.mode == NumberMode.BOX
 
@@ -1902,9 +1816,7 @@ class TestNumberMissingCoverage:
     # Line 210: device_class — capability_type "temperature" with _device_class=None string
     # ------------------------------------------------------------------ #
 
-    def test_device_class_returns_none_when_no_catalog_no_device_class_no_temp(
-        self, mock_coordinator
-    ):
+    def test_device_class_returns_none_when_no_catalog_no_device_class_no_temp(self, mock_coordinator):
         """Device class is None when capability type isn't temperature (line 202+217)."""
 
         entity = self._make_entity(
@@ -1976,9 +1888,7 @@ class TestNumberMissingCoverage:
     # Lines 388-390: native_unit_of_measurement SECONDS → MINUTES
     # ------------------------------------------------------------------ #
 
-    def test_native_unit_of_measurement_seconds_to_minutes_conversion(
-        self, mock_coordinator
-    ):
+    def test_native_unit_of_measurement_seconds_to_minutes_conversion(self, mock_coordinator):
         """SECONDS unit is converted to MINUTES for UI display (lines 388-390)."""
         entity = self._make_entity(
             mock_coordinator,
@@ -1990,9 +1900,7 @@ class TestNumberMissingCoverage:
     # Line 419: _get_converted_constraint — locked + SECONDS path
     # ------------------------------------------------------------------ #
 
-    def test_get_converted_constraint_locked_time_entity_converts_to_minutes(
-        self, mock_coordinator
-    ):
+    def test_get_converted_constraint_locked_time_entity_converts_to_minutes(self, mock_coordinator):
         """Locked time entity converts locked_value from seconds to minutes (line 419)."""
         entity = self._make_entity(
             mock_coordinator,
@@ -2009,9 +1917,7 @@ class TestNumberMissingCoverage:
     # Line 444: catalog non-numeric falls through, catalog time entity seconds→minutes
     # ------------------------------------------------------------------ #
 
-    def test_get_converted_constraint_catalog_numeric_seconds_to_minutes(
-        self, mock_coordinator
-    ):
+    def test_get_converted_constraint_catalog_numeric_seconds_to_minutes(self, mock_coordinator):
         """Catalog numeric value for time entity is converted from seconds to minutes (line 444)."""
         entity = self._make_entity(
             mock_coordinator,
@@ -2030,9 +1936,7 @@ class TestNumberMissingCoverage:
     # Lines 504-506: _get_converted_constraint step with val from time conversion
     # ------------------------------------------------------------------ #
 
-    def test_get_converted_constraint_step_time_entity_converts_to_minutes(
-        self, mock_coordinator
-    ):
+    def test_get_converted_constraint_step_time_entity_converts_to_minutes(self, mock_coordinator):
         """Step for time entity with val is converted from seconds to minutes (lines 504-506)."""
         entity = self._make_entity(
             mock_coordinator,
@@ -2106,9 +2010,7 @@ class TestNumberMissingCoverage:
     # ------------------------------------------------------------------ #
 
     # Line 185-186: catalog device_class is NumberDeviceClass (not "temperature" string)
-    def test_device_class_catalog_non_temperature_number_device_class(
-        self, mock_coordinator
-    ):
+    def test_device_class_catalog_non_temperature_number_device_class(self, mock_coordinator):
         """Catalog device_class = HUMIDITY hits isinstance branch (lines 185-186)."""
         from homeassistant.components.number import NumberDeviceClass
 
@@ -2138,9 +2040,7 @@ class TestNumberMissingCoverage:
         )
         entity.reported_state = {"connectivityState": "connected"}
         # Make entity locked (min=max = step=0)
-        entity._get_program_constraint = MagicMock(
-            side_effect=lambda k: {"min": 60.0, "max": 60.0, "step": 1.0}.get(k)
-        )
+        entity._get_program_constraint = MagicMock(side_effect=lambda k: {"min": 60.0, "max": 60.0, "step": 1.0}.get(k))
         entity._is_supported_by_program = MagicMock(return_value=True)
         # 60 seconds locked value → 1 minute displayed
         result = entity.native_value
@@ -2151,9 +2051,7 @@ class TestNumberMissingCoverage:
         """targetDuration is never locked by program (line 321 = return False for time entities)."""
         entity = self._make_entity(mock_coordinator, entity_attr="targetDuration")
         entity._get_program_constraint = MagicMock(return_value=None)
-        entity._is_supported_by_program = MagicMock(
-            return_value=False
-        )  # even if unsupported
+        entity._is_supported_by_program = MagicMock(return_value=False)  # even if unsupported
         assert entity._is_locked_by_program() is False
 
     def test_is_locked_returns_false_for_program(self, mock_coordinator):
@@ -2167,24 +2065,18 @@ class TestNumberMissingCoverage:
     def test_get_locked_value_uses_program_min_when_no_default(self, mock_coordinator):
         """_get_locked_value returns program_min when program_default is None (line 370)."""
         entity = self._make_entity(mock_coordinator)
-        entity._get_program_constraint = MagicMock(
-            side_effect=lambda k: {"default": None, "min": 55.0}.get(k)
-        )
+        entity._get_program_constraint = MagicMock(side_effect=lambda k: {"default": None, "min": 55.0}.get(k))
         # program_default = None, program_min = 55.0 → returns 55.0
         assert entity._get_locked_value() == 55.0
 
     # Line 390: native_unit_of_measurement returns MINUTES for SECONDS unit
-    def test_native_unit_measurement_seconds_unit_returns_minutes(
-        self, mock_coordinator
-    ):
+    def test_native_unit_measurement_seconds_unit_returns_minutes(self, mock_coordinator):
         """SECONDS unit returns MINUTES from native_unit_of_measurement (line 390)."""
         entity = self._make_entity(mock_coordinator, unit=UnitOfTime.SECONDS)
         assert entity.native_unit_of_measurement == UnitOfTime.MINUTES
 
     # Line 444: catalog numeric val for NON-time entity returns float(cat_val)
-    def test_get_converted_constraint_catalog_non_time_returns_float(
-        self, mock_coordinator
-    ):
+    def test_get_converted_constraint_catalog_non_time_returns_float(self, mock_coordinator):
         """Catalog constraint for non-time entity returns float(cat_val) directly (line 444)."""
         entity = self._make_entity(
             mock_coordinator,
@@ -2201,9 +2093,7 @@ class TestNumberMissingCoverage:
         assert result == 230.0
 
     # Lines 504-506: step where val=None from program+capability fallback
-    def test_get_converted_constraint_step_no_program_no_capability(
-        self, mock_coordinator
-    ):
+    def test_get_converted_constraint_step_no_program_no_capability(self, mock_coordinator):
         """Step with no catalog, no program, no capability constraint uses DEFAULT_NUMBER_STEP (lines 504-506)."""
         from custom_components.electrolux.const import DEFAULT_NUMBER_STEP
 
@@ -2222,9 +2112,7 @@ class TestNumberMissingCoverage:
 
     # Lines 611-618: appliance offline in async_set_native_value
     @pytest.mark.asyncio
-    async def test_set_native_value_raises_when_appliance_offline(
-        self, mock_coordinator
-    ):
+    async def test_set_native_value_raises_when_appliance_offline(self, mock_coordinator):
         """Raises HomeAssistantError when appliance offline after range check (lines 611-618)."""
         entity = self._make_entity(
             mock_coordinator,
@@ -2293,9 +2181,7 @@ class TestNumberMissingCoverage:
         assert entity.native_value == 72
 
     @pytest.mark.asyncio
-    async def test_set_native_value_target_temp_f_redirects_to_c(
-        self, mock_coordinator
-    ):
+    async def test_set_native_value_target_temp_f_redirects_to_c(self, mock_coordinator) -> None:
         """Writing ``_f`` redirects to ``_c`` (F→C conversion) when the
         device's reported state contains a live ``targetTemperatureC``.
         Mirrors the read-derive contract — the device only honours ``_c``.
@@ -2345,14 +2231,10 @@ class TestNumberMissingCoverage:
         assert command == {"targetTemperatureC": 23.89}
         # Optimistic update on the canonical field so the read-derive
         # picks up the new value before SSE confirms.
-        entity._apply_optimistic_update.assert_called_once_with(
-            "targetTemperatureC", 23.89
-        )
+        entity._apply_optimistic_update.assert_called_once_with("targetTemperatureC", 23.89)
 
     @pytest.mark.asyncio
-    async def test_set_native_value_target_temp_f_no_c_falls_through(
-        self, mock_coordinator
-    ):
+    async def test_set_native_value_target_temp_f_no_c_falls_through(self, mock_coordinator) -> None:
         """When ``targetTemperatureC`` is absent from reported state, the
         ``_f`` write does NOT redirect — the device populates F natively
         (e.g. F-locale oven) and should be written directly."""
@@ -2424,14 +2306,10 @@ class TestNumberMissingCoverage:
         )
         entity._is_disabled_by_trigger = MagicMock(return_value=False)
 
-        with patch.object(
-            ElectroluxEntity, "available", new_callable=PropertyMock, return_value=True
-        ):
+        with patch.object(ElectroluxEntity, "available", new_callable=PropertyMock, return_value=True):
             assert entity.available is True
 
-    def test_available_false_for_any_attr_when_disabled_by_trigger(
-        self, mock_coordinator
-    ):
+    def test_available_false_for_any_attr_when_disabled_by_trigger(self, mock_coordinator):
         """The trigger-disabled rule applies uniformly: a non-temperature
         attribute (e.g. ``targetDuration``) marked ``disabled: true`` by a
         trigger must also become unavailable. The Electrolux API rejection
@@ -2447,9 +2325,7 @@ class TestNumberMissingCoverage:
 
     # Bug 4 / PR #63: AC target temperature off-state guard
     @pytest.mark.asyncio
-    async def test_set_native_value_target_temp_raises_when_appliance_off(
-        self, mock_coordinator
-    ):
+    async def test_set_native_value_target_temp_raises_when_appliance_off(self, mock_coordinator):
         """targetTemperatureC slider while applianceState=off must raise.
 
         Mirrors the climate-entity off-state guard. The Electrolux API returns
@@ -2473,9 +2349,7 @@ class TestNumberMissingCoverage:
             await entity.async_set_native_value(24.0)
 
     @pytest.mark.asyncio
-    async def test_set_native_value_target_temp_raises_when_mode_off_optimistic(
-        self, mock_coordinator
-    ):
+    async def test_set_native_value_target_temp_raises_when_mode_off_optimistic(self, mock_coordinator):
         """Off-state guard must trip on the optimistic ``mode=OFF`` write too.
 
         ``async_set_hvac_mode(HVACMode.OFF)`` writes ``mode=OFF`` to the local
@@ -2517,9 +2391,7 @@ class TestNumberMissingCoverage:
             assert entity.available is True
 
     # L217: native_value when locked AND unit=SECONDS → time conversion
-    def test_native_value_locked_unit_seconds_converts_to_minutes(
-        self, mock_coordinator
-    ):
+    def test_native_value_locked_unit_seconds_converts_to_minutes(self, mock_coordinator):
         """L217: locked entity with UnitOfTime.SECONDS returns converted minutes."""
         from custom_components.electrolux.number import ElectroluxNumber
 

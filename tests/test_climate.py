@@ -65,9 +65,7 @@ class TestElectroluxClimate:
         appliance.brand = "Electrolux"
         appliance.model = "910280820"
         appliance.state = ac_device_data["current_state"]
-        appliance.reported_state = ac_device_data["current_state"]["properties"][
-            "reported"
-        ]
+        appliance.reported_state = ac_device_data["current_state"]["properties"]["reported"]
         appliance.get_cached_catalog.return_value = ac_device_data["capabilities"]
         return appliance
 
@@ -451,9 +449,7 @@ class TestElectroluxClimate:
 
         await climate_entity_f.async_set_temperature(temperature=75.0)
 
-        climate_entity_f._send_command.assert_called_once_with(
-            "targetTemperatureF", 75.0
-        )
+        climate_entity_f._send_command.assert_called_once_with("targetTemperatureF", 75.0)
 
     @pytest.mark.asyncio
     async def test_async_set_temperature_no_value(self, climate_entity):
@@ -465,9 +461,7 @@ class TestElectroluxClimate:
         climate_entity._send_command.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_async_set_temperature_off_with_hvac_mode_splits_commands(
-        self, climate_entity, mock_appliance
-    ):
+    async def test_async_set_temperature_off_with_hvac_mode_splits_commands(self, climate_entity, mock_appliance):
         """When device is OFF and hvac_mode provided, power on first then set temp.
 
         The Electrolux API returns HTTP 500 if a combined power-on + temperature
@@ -478,9 +472,7 @@ class TestElectroluxClimate:
         mock_appliance.reported_state["mode"] = "OFF"
         climate_entity._send_command = AsyncMock()
 
-        await climate_entity.async_set_temperature(
-            temperature=26.0, hvac_mode=HVACMode.COOL
-        )
+        await climate_entity.async_set_temperature(temperature=26.0, hvac_mode=HVACMode.COOL)
 
         # Expect three commands: ON, mode=COOL, targetTemperatureC=26.0
         assert climate_entity._send_command.call_count == 3
@@ -491,9 +483,7 @@ class TestElectroluxClimate:
         assert climate_entity._last_user_temperature == 26.0
 
     @pytest.mark.asyncio
-    async def test_async_set_temperature_off_without_hvac_mode_raises(
-        self, climate_entity, mock_appliance
-    ):
+    async def test_async_set_temperature_off_without_hvac_mode_raises(self, climate_entity, mock_appliance):
         """When device is OFF and no hvac_mode provided, raise HomeAssistantError.
 
         Setting temperature on an off device returns HTTP 500 from the API.
@@ -510,9 +500,7 @@ class TestElectroluxClimate:
         climate_entity._send_command.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_async_set_temperature_off_with_hvac_mode_off_raises(
-        self, climate_entity, mock_appliance
-    ):
+    async def test_async_set_temperature_off_with_hvac_mode_off_raises(self, climate_entity, mock_appliance):
         """OFF + hvac_mode=OFF must raise — never fall through to simple-set.
 
         ``hvac_mode=OFF`` looks like a valid kwarg but cannot power the
@@ -525,16 +513,12 @@ class TestElectroluxClimate:
         climate_entity._send_command = AsyncMock()
 
         with pytest.raises(HomeAssistantError, match="appliance is off"):
-            await climate_entity.async_set_temperature(
-                temperature=24.0, hvac_mode=HVACMode.OFF
-            )
+            await climate_entity.async_set_temperature(temperature=24.0, hvac_mode=HVACMode.OFF)
 
         climate_entity._send_command.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_async_set_temperature_on_mode_change_failure_rolls_back_cache(
-        self, climate_entity, mock_appliance
-    ):
+    async def test_async_set_temperature_on_mode_change_failure_rolls_back_cache(self, climate_entity, mock_appliance):
         """ON + hvac_mode-change path must roll back ``_last_user_temperature`` on failure.
 
         Mirrors the rollback contract already covered for the OFF path, but
@@ -548,9 +532,7 @@ class TestElectroluxClimate:
         climate_entity._send_command = AsyncMock(side_effect=RuntimeError("boom"))
 
         with pytest.raises(RuntimeError):
-            await climate_entity.async_set_temperature(
-                temperature=28.0, hvac_mode=HVACMode.HEAT
-            )
+            await climate_entity.async_set_temperature(temperature=28.0, hvac_mode=HVACMode.HEAT)
 
         assert climate_entity._last_user_temperature == 22.0
 
@@ -569,9 +551,7 @@ class TestElectroluxClimate:
         mock_appliance.reported_state["mode"] = "COOL"
         climate_entity._send_command = AsyncMock()
 
-        await climate_entity.async_set_temperature(
-            temperature=28.0, hvac_mode=HVACMode.HEAT
-        )
+        await climate_entity.async_set_temperature(temperature=28.0, hvac_mode=HVACMode.HEAT)
 
         # Three commands: ON (idempotent), mode=HEAT, targetTemperatureC=28.0
         assert climate_entity._send_command.call_count == 3
@@ -582,26 +562,20 @@ class TestElectroluxClimate:
         assert climate_entity._last_user_temperature == 28.0
 
     @pytest.mark.asyncio
-    async def test_async_set_temperature_on_with_same_hvac_mode_uses_simple_path(
-        self, climate_entity, mock_appliance
-    ):
+    async def test_async_set_temperature_on_with_same_hvac_mode_uses_simple_path(self, climate_entity, mock_appliance):
         """On-device + hvac_mode equal to current uses the simple set path."""
         mock_appliance.reported_state["applianceState"] = "RUNNING"
         mock_appliance.reported_state["mode"] = "COOL"
         climate_entity._send_command = AsyncMock()
 
-        await climate_entity.async_set_temperature(
-            temperature=24.0, hvac_mode=HVACMode.COOL
-        )
+        await climate_entity.async_set_temperature(temperature=24.0, hvac_mode=HVACMode.COOL)
 
         # One command — same-mode case must not trigger the 3-command sequence.
         climate_entity._send_command.assert_called_once_with("targetTemperatureC", 24.0)
         assert climate_entity._last_user_temperature == 24.0
 
     @pytest.mark.asyncio
-    async def test_async_set_temperature_on_failure_does_not_pollute_cache(
-        self, climate_entity, mock_appliance
-    ):
+    async def test_async_set_temperature_on_failure_does_not_pollute_cache(self, climate_entity, mock_appliance):
         """ON-device path must not write _last_user_temperature on failed command.
 
         Previously the cache was set before the API call, so a failed command
@@ -620,9 +594,7 @@ class TestElectroluxClimate:
         assert climate_entity._last_user_temperature == 22.0
 
     @pytest.mark.asyncio
-    async def test_async_set_temperature_off_failure_rolls_back_cache(
-        self, climate_entity, mock_appliance
-    ):
+    async def test_async_set_temperature_off_failure_rolls_back_cache(self, climate_entity, mock_appliance):
         """OFF + hvac_mode path must roll back cache if async_set_hvac_mode fails."""
         mock_appliance.reported_state["applianceState"] = "Off"
         mock_appliance.reported_state["mode"] = "cool"
@@ -630,9 +602,7 @@ class TestElectroluxClimate:
         climate_entity._send_command = AsyncMock(side_effect=RuntimeError("boom"))
 
         with pytest.raises(RuntimeError):
-            await climate_entity.async_set_temperature(
-                temperature=19.0, hvac_mode=HVACMode.COOL
-            )
+            await climate_entity.async_set_temperature(temperature=19.0, hvac_mode=HVACMode.COOL)
 
         assert climate_entity._last_user_temperature == 22.0
 
@@ -794,9 +764,7 @@ class TestElectroluxClimate:
         assert climate_entity.extra_state_attributes == {}
 
     @pytest.mark.asyncio
-    async def test_last_temperature_not_restored_when_no_prior_state(
-        self, climate_entity
-    ):
+    async def test_last_temperature_not_restored_when_no_prior_state(self, climate_entity):
         """No prior state → _last_user_temperature stays None."""
         climate_entity._last_user_temperature = None
         climate_entity.async_get_last_state = AsyncMock(return_value=None)
@@ -833,21 +801,23 @@ class TestElectroluxClimate:
         mock_api = MagicMock()
         climate_entity.api = mock_api
 
-        with patch.object(
-            type(climate_entity),
-            "is_dam_appliance",
-            new_callable=lambda: property(lambda self: False),
-        ):
-            with patch(
+        with (
+            patch.object(
+                type(climate_entity),
+                "is_dam_appliance",
+                new_callable=lambda: property(lambda self: False),
+            ),
+            patch(
                 "custom_components.electrolux.climate.execute_command_with_error_handling",
                 AsyncMock(),
-            ) as mock_execute:
-                await climate_entity._send_command("targetTemperatureC", 24.0)
+            ) as mock_execute,
+        ):
+            await climate_entity._send_command("targetTemperatureC", 24.0)
 
-                mock_execute.assert_called_once()
-                call_args = mock_execute.call_args[0]
-                command = call_args[2]
-                assert command == {"targetTemperatureC": 24.0}
+            mock_execute.assert_called_once()
+            call_args = mock_execute.call_args[0]
+            command = call_args[2]
+            assert command == {"targetTemperatureC": 24.0}
 
     @pytest.mark.asyncio
     async def test_send_command_dam_appliance(self, climate_entity, mock_appliance):
@@ -856,27 +826,26 @@ class TestElectroluxClimate:
         mock_api = MagicMock()
         climate_entity.api = mock_api
 
-        with patch.object(
-            type(climate_entity),
-            "is_dam_appliance",
-            new_callable=lambda: property(lambda self: True),
-        ):
-            with patch(
+        with (
+            patch.object(
+                type(climate_entity),
+                "is_dam_appliance",
+                new_callable=lambda: property(lambda self: True),
+            ),
+            patch(
                 "custom_components.electrolux.climate.execute_command_with_error_handling",
                 AsyncMock(),
-            ) as mock_execute:
-                await climate_entity._send_command("targetTemperatureC", 24.0)
+            ) as mock_execute,
+        ):
+            await climate_entity._send_command("targetTemperatureC", 24.0)
 
-                mock_execute.assert_called_once()
-                call_args = mock_execute.call_args[0]
-                command = call_args[2]
-                assert "commands" in command
-                assert len(command["commands"]) == 1
-                assert "airConditioner" in command["commands"][0]
-                assert (
-                    command["commands"][0]["airConditioner"]["targetTemperatureC"]
-                    == 24.0
-                )
+            mock_execute.assert_called_once()
+            call_args = mock_execute.call_args[0]
+            command = call_args[2]
+            assert "commands" in command
+            assert len(command["commands"]) == 1
+            assert "airConditioner" in command["commands"][0]
+            assert command["commands"][0]["airConditioner"]["targetTemperatureC"] == 24.0
 
     @pytest.mark.asyncio
     async def test_send_command_error_handling(self, climate_entity):
@@ -884,17 +853,19 @@ class TestElectroluxClimate:
         mock_api = MagicMock()
         climate_entity.api = mock_api
 
-        with patch.object(
-            type(climate_entity),
-            "is_dam_appliance",
-            new_callable=lambda: property(lambda self: False),
-        ):
-            with patch(
+        with (
+            patch.object(
+                type(climate_entity),
+                "is_dam_appliance",
+                new_callable=lambda: property(lambda self: False),
+            ),
+            patch(
                 "custom_components.electrolux.climate.execute_command_with_error_handling",
                 AsyncMock(side_effect=Exception("Command failed")),
-            ):
-                with pytest.raises(Exception, match="Command failed"):
-                    await climate_entity._send_command("targetTemperatureC", 24.0)
+            ),
+            pytest.raises(Exception, match="Command failed"),
+        ):
+            await climate_entity._send_command("targetTemperatureC", 24.0)
 
 
 class TestElectroluxClimateMissingCoverage:

@@ -33,9 +33,7 @@ def mock_hass():
     mock_loop.time.return_value = 1_000_000.0
     hass = MagicMock()
     hass.loop = mock_loop
-    hass.async_create_task = MagicMock(
-        side_effect=lambda coro, **kwargs: asyncio.ensure_future(coro)
-    )
+    hass.async_create_task = MagicMock(side_effect=lambda coro, **kwargs: asyncio.ensure_future(coro))
     return hass
 
 
@@ -44,13 +42,9 @@ def mock_api():
     client = MagicMock()
     client._auth_failed = False
     client.disconnect_websocket = AsyncMock()
-    client.get_appliance_state = AsyncMock(
-        return_value={"connectivityState": "connected", "timeToEnd": 0}
-    )
+    client.get_appliance_state = AsyncMock(return_value={"connectivityState": "connected", "timeToEnd": 0})
     client.get_appliances_list = AsyncMock(return_value=[])
-    client.get_appliances_info = AsyncMock(
-        return_value=[{"model": "TestModel", "brand": "Electrolux"}]
-    )
+    client.get_appliances_info = AsyncMock(return_value=[{"model": "TestModel", "brand": "Electrolux"}])
     client.get_appliance_capabilities = AsyncMock(return_value={})
     client.watch_for_appliance_state_updates = AsyncMock(return_value=None)
     client.close = AsyncMock()
@@ -129,16 +123,12 @@ def _make_appliances(appliance_ids_states: dict[str, dict]):
 class TestListenWebsocketGaps:
     """Lines 778-780: outer except when watch_for_appliance_state_updates raises."""
 
-    async def test_watch_raises_exception_logs_and_reraises(
-        self, coordinator, mock_api
-    ):
+    async def test_watch_raises_exception_logs_and_reraises(self, coordinator, mock_api):
         """Lines 778-780: exception from watch_for propagates after logging."""
         appliances = _make_appliances({"APP001": {"connectivityState": "connected"}})
         coordinator.data = {"appliances": appliances}
 
-        mock_api.watch_for_appliance_state_updates = AsyncMock(
-            side_effect=RuntimeError("SSE connection failed")
-        )
+        mock_api.watch_for_appliance_state_updates = AsyncMock(side_effect=RuntimeError("SSE connection failed"))
 
         with pytest.raises(RuntimeError, match="SSE connection failed"):
             await coordinator.listen_websocket()
@@ -150,16 +140,12 @@ class TestListenWebsocketGaps:
 
         # Make watch_for_appliance_state_updates take too long so asyncio.wait_for fires
         # We simulate by raising asyncio.TimeoutError directly
-        mock_api.watch_for_appliance_state_updates = AsyncMock(
-            side_effect=asyncio.TimeoutError("timed out")
-        )
+        mock_api.watch_for_appliance_state_updates = AsyncMock(side_effect=TimeoutError("timed out"))
 
         with pytest.raises(asyncio.TimeoutError):
             await coordinator.listen_websocket()
 
-    async def test_listen_websocket_passes_on_connected_hook(
-        self, coordinator, mock_api
-    ):
+    async def test_listen_websocket_passes_on_connected_hook(self, coordinator, mock_api):
         """listen_websocket wires the real SSE on_connected hook into the API client."""
         appliances = _make_appliances({"APP001": {"connectivityState": "connected"}})
         coordinator.data = {"appliances": appliances}
@@ -170,9 +156,7 @@ class TestListenWebsocketGaps:
         kwargs = mock_api.watch_for_appliance_state_updates.await_args.kwargs
         assert kwargs["on_connected"] == coordinator._on_sse_connected
 
-    async def test_listen_websocket_starts_watchdog_monitor_task(
-        self, coordinator, mock_api
-    ):
+    async def test_listen_websocket_starts_watchdog_monitor_task(self, coordinator, mock_api):
         """listen_websocket should start SSE watchdog monitor after successful setup."""
         appliances = _make_appliances({"APP001": {"connectivityState": "connected"}})
         coordinator.data = {"appliances": appliances}
@@ -180,19 +164,14 @@ class TestListenWebsocketGaps:
         started = MagicMock()
         coordinator._sse_stall_monitor_task = None
         coordinator.hass.async_create_task = MagicMock(
-            side_effect=lambda coro, **kwargs: (
-                coro.close() if asyncio.iscoroutine(coro) else None
-            )
-            or started
+            side_effect=lambda coro, **kwargs: (coro.close() if asyncio.iscoroutine(coro) else None) or started
         )
 
         await coordinator.listen_websocket()
 
         assert coordinator._sse_stall_monitor_task is started
 
-    async def test_listen_websocket_starts_time_to_end_monitor_task(
-        self, coordinator, mock_api
-    ):
+    async def test_listen_websocket_starts_time_to_end_monitor_task(self, coordinator, mock_api):
         """listen_websocket should also start the timeToEnd staleness monitor (#104)."""
         appliances = _make_appliances({"APP001": {"connectivityState": "connected"}})
         coordinator.data = {"appliances": appliances}
@@ -200,19 +179,14 @@ class TestListenWebsocketGaps:
         started = MagicMock()
         coordinator._time_to_end_monitor_task = None
         coordinator.hass.async_create_task = MagicMock(
-            side_effect=lambda coro, **kwargs: (
-                coro.close() if asyncio.iscoroutine(coro) else None
-            )
-            or started
+            side_effect=lambda coro, **kwargs: (coro.close() if asyncio.iscoroutine(coro) else None) or started
         )
 
         await coordinator.listen_websocket()
 
         assert coordinator._time_to_end_monitor_task is started
 
-    async def test_ensure_time_to_end_monitor_skips_when_already_running(
-        self, coordinator
-    ):
+    async def test_ensure_time_to_end_monitor_skips_when_already_running(self, coordinator):
         """A live monitor task should not be replaced by a new one."""
         existing = MagicMock()
         existing.done.return_value = False
@@ -238,9 +212,7 @@ class TestSseReconnectResync:
         assert coordinator._last_sse_resync_time == 1_000_000.0
 
     async def test_on_sse_connected_swallows_refresh_errors(self, coordinator):
-        coordinator._refresh_all_appliances = AsyncMock(
-            side_effect=RuntimeError("boom")
-        )
+        coordinator._refresh_all_appliances = AsyncMock(side_effect=RuntimeError("boom"))
         coordinator.hass.loop.time.return_value = 1_000_000.0
 
         await coordinator._on_sse_connected()
@@ -261,9 +233,7 @@ class TestSseReconnectResync:
 
         coordinator._refresh_all_appliances.assert_awaited_once()
 
-    async def test_close_websocket_cancels_pending_sse_resync(
-        self, coordinator, mock_api
-    ):
+    async def test_close_websocket_cancels_pending_sse_resync(self, coordinator, mock_api):
         coordinator._pending_sse_resync_task = asyncio.create_task(asyncio.sleep(3600))
 
         await coordinator.close_websocket()
@@ -349,9 +319,8 @@ class TestSseStallWatchdog:
                 return
             raise asyncio.CancelledError()
 
-        with patch("asyncio.sleep", side_effect=_sleep):
-            with pytest.raises(asyncio.CancelledError):
-                await coordinator._monitor_sse_stall_loop()
+        with patch("asyncio.sleep", side_effect=_sleep), pytest.raises(asyncio.CancelledError):
+            await coordinator._monitor_sse_stall_loop()
 
         coordinator._restart_sse_if_stalled.assert_awaited_once()
 
@@ -377,9 +346,7 @@ class TestTimeToEndStalenessWatchdog:
         coordinator._appliances_cache = appliances
         coordinator.hass.loop.time.return_value = 1_000_500.0
 
-        coordinator.incoming_data(
-            {"applianceId": "APP001", "property": "timeToEnd", "value": 120}
-        )
+        coordinator.incoming_data({"applianceId": "APP001", "property": "timeToEnd", "value": 120})
 
         assert coordinator._last_time_to_end_seen["APP001"] == 1_000_500.0
 
@@ -398,9 +365,8 @@ class TestTimeToEndStalenessWatchdog:
                 return
             raise asyncio.CancelledError()
 
-        with patch("asyncio.sleep", side_effect=_sleep):
-            with pytest.raises(asyncio.CancelledError):
-                await coordinator._monitor_time_to_end_staleness_loop()
+        with patch("asyncio.sleep", side_effect=_sleep), pytest.raises(asyncio.CancelledError):
+            await coordinator._monitor_time_to_end_staleness_loop()
 
         coordinator._poll_time_to_end.assert_awaited_once_with("APP001")
 
@@ -414,9 +380,8 @@ class TestTimeToEndStalenessWatchdog:
         async def _sleep(_secs):
             raise asyncio.CancelledError()
 
-        with patch("asyncio.sleep", side_effect=_sleep):
-            with pytest.raises(asyncio.CancelledError):
-                await coordinator._monitor_time_to_end_staleness_loop()
+        with patch("asyncio.sleep", side_effect=_sleep), pytest.raises(asyncio.CancelledError):
+            await coordinator._monitor_time_to_end_staleness_loop()
 
         coordinator._poll_time_to_end.assert_not_awaited()
 
@@ -430,9 +395,8 @@ class TestTimeToEndStalenessWatchdog:
         async def _sleep(_secs):
             raise asyncio.CancelledError()
 
-        with patch("asyncio.sleep", side_effect=_sleep):
-            with pytest.raises(asyncio.CancelledError):
-                await coordinator._monitor_time_to_end_staleness_loop()
+        with patch("asyncio.sleep", side_effect=_sleep), pytest.raises(asyncio.CancelledError):
+            await coordinator._monitor_time_to_end_staleness_loop()
 
         coordinator._poll_time_to_end.assert_not_awaited()
 
@@ -449,21 +413,16 @@ class TestTimeToEndStalenessWatchdog:
         async def _sleep(_secs):
             raise asyncio.CancelledError()
 
-        with patch("asyncio.sleep", side_effect=_sleep):
-            with pytest.raises(asyncio.CancelledError):
-                await coordinator._monitor_time_to_end_staleness_loop()
+        with patch("asyncio.sleep", side_effect=_sleep), pytest.raises(asyncio.CancelledError):
+            await coordinator._monitor_time_to_end_staleness_loop()
 
         coordinator._poll_time_to_end.assert_not_awaited()
 
-    async def test_poll_time_to_end_success_updates_state_and_marks_fresh(
-        self, coordinator, mock_api
-    ):
+    async def test_poll_time_to_end_success_updates_state_and_marks_fresh(self, coordinator, mock_api):
         appliances = _make_appliances({"APP001": {"applianceState": "RUNNING"}})
         coordinator.data = {"appliances": appliances}
         coordinator.hass.loop.time.return_value = 1_000_999.0
-        mock_api.get_appliance_state = AsyncMock(
-            return_value={"applianceState": "RUNNING", "timeToEnd": 900}
-        )
+        mock_api.get_appliance_state = AsyncMock(return_value={"applianceState": "RUNNING", "timeToEnd": 900})
 
         await coordinator._poll_time_to_end("APP001")
 
@@ -473,9 +432,7 @@ class TestTimeToEndStalenessWatchdog:
         coordinator.async_set_updated_data.assert_called_once_with(coordinator.data)
         assert coordinator._last_time_to_end_seen["APP001"] == 1_000_999.0
 
-    async def test_poll_time_to_end_failure_is_logged_not_raised(
-        self, coordinator, mock_api
-    ):
+    async def test_poll_time_to_end_failure_is_logged_not_raised(self, coordinator, mock_api):
         appliances = _make_appliances({"APP001": {"applianceState": "RUNNING"}})
         coordinator.data = {"appliances": appliances}
         mock_api.get_appliance_state = AsyncMock(side_effect=ConnectionError("boom"))
@@ -505,9 +462,7 @@ class TestRenewWebsocketGaps:
         # Build _token_manager mock
         token_manager = MagicMock()
         token_manager.is_token_valid = MagicMock(return_value=False)
-        token_manager.refresh_token = AsyncMock(
-            side_effect=asyncio.TimeoutError("refresh timed out")
-        )
+        token_manager.refresh_token = AsyncMock(side_effect=TimeoutError("refresh timed out"))
         mock_api._token_manager = token_manager
 
         # After token refresh attempt, disconnect+listen should succeed
@@ -521,22 +476,17 @@ class TestRenewWebsocketGaps:
             if sleep_call >= 2:
                 raise asyncio.CancelledError()
 
-        with patch("asyncio.sleep", side_effect=mock_sleep):
-            with pytest.raises(asyncio.CancelledError):
-                await coordinator.renew_websocket()
+        with patch("asyncio.sleep", side_effect=mock_sleep), pytest.raises(asyncio.CancelledError):
+            await coordinator.renew_websocket()
 
         # lines 805-806 were hit (token refresh timeout logged)
         assert sleep_call >= 2
 
-    async def test_token_refresh_general_exception_logs_warning(
-        self, coordinator, mock_api
-    ):
+    async def test_token_refresh_general_exception_logs_warning(self, coordinator, mock_api):
         """Lines 808-810: generic Exception from token refresh."""
         token_manager = MagicMock()
         token_manager.is_token_valid = MagicMock(return_value=False)
-        token_manager.refresh_token = AsyncMock(
-            side_effect=ConnectionError("refresh failed")
-        )
+        token_manager.refresh_token = AsyncMock(side_effect=ConnectionError("refresh failed"))
         mock_api._token_manager = token_manager
 
         coordinator.listen_websocket = AsyncMock(return_value=None)
@@ -549,18 +499,15 @@ class TestRenewWebsocketGaps:
             if sleep_call >= 2:
                 raise asyncio.CancelledError()
 
-        with patch("asyncio.sleep", side_effect=mock_sleep):
-            with pytest.raises(asyncio.CancelledError):
-                await coordinator.renew_websocket()
+        with patch("asyncio.sleep", side_effect=mock_sleep), pytest.raises(asyncio.CancelledError):
+            await coordinator.renew_websocket()
 
         assert sleep_call >= 1
 
     async def test_backoff_after_five_failures(self, coordinator, mock_api):
         """Lines 837-841: backoff after 5 consecutive failures."""
         # disconnect raises exception every call → consecutive_failures accumulates
-        mock_api.disconnect_websocket = AsyncMock(
-            side_effect=RuntimeError("disconnect failed")
-        )
+        mock_api.disconnect_websocket = AsyncMock(side_effect=RuntimeError("disconnect failed"))
         coordinator.listen_websocket = AsyncMock(return_value=None)
 
         # Remove _token_manager to skip token check
@@ -575,18 +522,15 @@ class TestRenewWebsocketGaps:
             if len(sleep_calls) >= 7:
                 raise asyncio.CancelledError()
 
-        with patch("asyncio.sleep", side_effect=mock_sleep):
-            with pytest.raises(asyncio.CancelledError):
-                await coordinator.renew_websocket()
+        with patch("asyncio.sleep", side_effect=mock_sleep), pytest.raises(asyncio.CancelledError):
+            await coordinator.renew_websocket()
 
         # Should have called backoff sleep (300s) after 5th failure
         from custom_components.electrolux.coordinator import WEBSOCKET_BACKOFF_DELAY
 
         assert WEBSOCKET_BACKOFF_DELAY in sleep_calls
 
-    async def test_outer_except_exception_increments_failures(
-        self, coordinator, mock_api
-    ):
+    async def test_outer_except_exception_increments_failures(self, coordinator, mock_api):
         """Lines 846-848: outer except Exception catches unexpected errors."""
         sleep_call = 0
 
@@ -598,9 +542,8 @@ class TestRenewWebsocketGaps:
             # 2nd call (after outer except loop continues): exit
             raise asyncio.CancelledError()
 
-        with patch("asyncio.sleep", side_effect=mock_sleep):
-            with pytest.raises(asyncio.CancelledError):
-                await coordinator.renew_websocket()
+        with patch("asyncio.sleep", side_effect=mock_sleep), pytest.raises(asyncio.CancelledError):
+            await coordinator.renew_websocket()
 
         # lines 846-848 were hit on RuntimeError from sleep
         assert sleep_call >= 2
@@ -640,9 +583,7 @@ class TestCloseWebsocketGaps:
 class TestSetupSingleApplianceGaps:
     """Tests for _setup_single_appliance exception handlers."""
 
-    async def test_network_error_with_no_appliance_id_returns_early(
-        self, coordinator, mock_api
-    ):
+    async def test_network_error_with_no_appliance_id_returns_early(self, coordinator, mock_api):
         """Lines 1049-1052: ConnectionError gather + no appliance_id → early return."""
         coordinator.data = {"appliances": Appliances({})}
         coordinator._cleanup_appliance_tasks = AsyncMock()
@@ -651,12 +592,8 @@ class TestSetupSingleApplianceGaps:
         appliance_json = {"connectionState": "connected", "applianceData": {}}
 
         # Make the API raise ConnectionError so the inner gather fails
-        mock_api.get_appliances_info = AsyncMock(
-            side_effect=ConnectionError("network error")
-        )
-        mock_api.get_appliance_state = AsyncMock(
-            side_effect=ConnectionError("network error")
-        )
+        mock_api.get_appliances_info = AsyncMock(side_effect=ConnectionError("network error"))
+        mock_api.get_appliance_state = AsyncMock(side_effect=ConnectionError("network error"))
 
         # Should return without raising (creates early return path)
         await coordinator._setup_single_appliance(appliance_json)
@@ -664,9 +601,7 @@ class TestSetupSingleApplianceGaps:
         # Appliance should NOT have been added (early return)
         assert coordinator.data["appliances"].appliances == {}
 
-    async def test_unexpected_error_from_gather_logs_diagnostics(
-        self, coordinator, mock_api
-    ):
+    async def test_unexpected_error_from_gather_logs_diagnostics(self, coordinator, mock_api):
         """Lines 1092-1144: RuntimeError from gather hits unexpected error handler."""
         coordinator.data = {"appliances": Appliances({})}
         coordinator._cleanup_appliance_tasks = AsyncMock()
@@ -678,19 +613,13 @@ class TestSetupSingleApplianceGaps:
         }
 
         # Make info raise generic RuntimeError (not ConnectionError/TimeoutError)
-        mock_api.get_appliances_info = AsyncMock(
-            side_effect=RuntimeError("unexpected API error")
-        )
-        mock_api.get_appliance_state = AsyncMock(
-            side_effect=RuntimeError("unexpected API error")
-        )
+        mock_api.get_appliances_info = AsyncMock(side_effect=RuntimeError("unexpected API error"))
+        mock_api.get_appliance_state = AsyncMock(side_effect=RuntimeError("unexpected API error"))
 
         # Should return without raising
         await coordinator._setup_single_appliance(appliance_json)
 
-    async def test_network_error_during_finalization_creates_minimal(
-        self, coordinator, mock_api
-    ):
+    async def test_network_error_during_finalization_creates_minimal(self, coordinator, mock_api):
         """Lines 1263-1330: ConnectionError from Appliance() hits outer network handler."""
         coordinator.data = {"appliances": Appliances({})}
         coordinator._cleanup_appliance_tasks = AsyncMock()
@@ -702,34 +631,30 @@ class TestSetupSingleApplianceGaps:
         }
 
         # API calls succeed
-        mock_api.get_appliances_info = AsyncMock(
-            return_value=[{"model": "TestModel", "brand": "Electrolux"}]
-        )
-        mock_api.get_appliance_state = AsyncMock(
-            return_value={"connectivityState": "connected"}
-        )
+        mock_api.get_appliances_info = AsyncMock(return_value=[{"model": "TestModel", "brand": "Electrolux"}])
+        mock_api.get_appliance_state = AsyncMock(return_value={"connectivityState": "connected"})
         mock_api.get_appliance_capabilities = AsyncMock(return_value={})
 
         # Appliance() raises ConnectionError on first call, succeeds on second (minimal)
         minimal_mock = MagicMock()
         minimal_mock.setup = MagicMock()
 
-        with patch(
-            "custom_components.electrolux.coordinator.Appliance",
-            side_effect=[ConnectionError("network error"), minimal_mock],
-        ):
-            with patch(
+        with (
+            patch(
+                "custom_components.electrolux.coordinator.Appliance",
+                side_effect=[ConnectionError("network error"), minimal_mock],
+            ),
+            patch(
                 "custom_components.electrolux.coordinator.ElectroluxLibraryEntity",
                 return_value=MagicMock(),
-            ):
-                await coordinator._setup_single_appliance(appliance_json)
+            ),
+        ):
+            await coordinator._setup_single_appliance(appliance_json)
 
         # Minimal appliance should be added
         assert "APP001" in coordinator.data["appliances"].appliances
 
-    async def test_network_error_finalization_no_appliance_id(
-        self, coordinator, mock_api
-    ):
+    async def test_network_error_finalization_no_appliance_id(self, coordinator, mock_api):
         """Lines 1263-1264: outer network error when failed_appliance_id is None."""
         coordinator.data = {"appliances": Appliances({})}
         coordinator._cleanup_appliance_tasks = AsyncMock()
@@ -740,12 +665,8 @@ class TestSetupSingleApplianceGaps:
             "applianceData": {"applianceName": "Test Appliance"},
         }
 
-        mock_api.get_appliances_info = AsyncMock(
-            return_value=[{"model": "M", "brand": "Electrolux"}]
-        )
-        mock_api.get_appliance_state = AsyncMock(
-            return_value={"connectivityState": "connected"}
-        )
+        mock_api.get_appliances_info = AsyncMock(return_value=[{"model": "M", "brand": "Electrolux"}])
+        mock_api.get_appliance_state = AsyncMock(return_value={"connectivityState": "connected"})
         mock_api.get_appliance_capabilities = AsyncMock(return_value={})
 
         # With no applianceId, code returns at line 1174 check
@@ -755,19 +676,19 @@ class TestSetupSingleApplianceGaps:
         minimal_mock = MagicMock()
         minimal_mock.setup = MagicMock()
 
-        with patch(
-            "custom_components.electrolux.coordinator.Appliance",
-            side_effect=[ConnectionError("network fail"), minimal_mock],
-        ):
-            with patch(
+        with (
+            patch(
+                "custom_components.electrolux.coordinator.Appliance",
+                side_effect=[ConnectionError("network fail"), minimal_mock],
+            ),
+            patch(
                 "custom_components.electrolux.coordinator.ElectroluxLibraryEntity",
                 return_value=MagicMock(),
-            ):
-                await coordinator._setup_single_appliance(appliance_json)
+            ),
+        ):
+            await coordinator._setup_single_appliance(appliance_json)
 
-    async def test_unexpected_error_handler_successful_recovery(
-        self, coordinator, mock_api
-    ):
+    async def test_unexpected_error_handler_successful_recovery(self, coordinator, mock_api):
         """Lines 1382-1430: RuntimeError from Appliance(), second Appliance call succeeds."""
         coordinator.data = {"appliances": Appliances({})}
         coordinator._cleanup_appliance_tasks = AsyncMock()
@@ -778,33 +699,29 @@ class TestSetupSingleApplianceGaps:
             "applianceData": {"applianceName": "Test Appliance"},
         }
 
-        mock_api.get_appliances_info = AsyncMock(
-            return_value=[{"model": "TestModel", "brand": "Electrolux"}]
-        )
-        mock_api.get_appliance_state = AsyncMock(
-            return_value={"connectivityState": "connected"}
-        )
+        mock_api.get_appliances_info = AsyncMock(return_value=[{"model": "TestModel", "brand": "Electrolux"}])
+        mock_api.get_appliance_state = AsyncMock(return_value={"connectivityState": "connected"})
         mock_api.get_appliance_capabilities = AsyncMock(return_value={})
 
         minimal_mock = MagicMock()
         minimal_mock.setup = MagicMock()
 
         # First Appliance() raises unexpected RuntimeError, second succeeds
-        with patch(
-            "custom_components.electrolux.coordinator.Appliance",
-            side_effect=[RuntimeError("unexpected create error"), minimal_mock],
-        ):
-            with patch(
+        with (
+            patch(
+                "custom_components.electrolux.coordinator.Appliance",
+                side_effect=[RuntimeError("unexpected create error"), minimal_mock],
+            ),
+            patch(
                 "custom_components.electrolux.coordinator.ElectroluxLibraryEntity",
                 return_value=MagicMock(),
-            ):
-                await coordinator._setup_single_appliance(appliance_json)
+            ),
+        ):
+            await coordinator._setup_single_appliance(appliance_json)
 
         assert "APP001" in coordinator.data["appliances"].appliances
 
-    async def test_unexpected_error_handler_failed_recovery(
-        self, coordinator, mock_api
-    ):
+    async def test_unexpected_error_handler_failed_recovery(self, coordinator, mock_api):
         """Line 1433: RuntimeError from both Appliance() calls."""
         coordinator.data = {"appliances": Appliances({})}
         coordinator._cleanup_appliance_tasks = AsyncMock()
@@ -815,12 +732,8 @@ class TestSetupSingleApplianceGaps:
             "applianceData": {"applianceName": "Test Appliance"},
         }
 
-        mock_api.get_appliances_info = AsyncMock(
-            return_value=[{"model": "TestModel", "brand": "Electrolux"}]
-        )
-        mock_api.get_appliance_state = AsyncMock(
-            return_value={"connectivityState": "connected"}
-        )
+        mock_api.get_appliances_info = AsyncMock(return_value=[{"model": "TestModel", "brand": "Electrolux"}])
+        mock_api.get_appliance_state = AsyncMock(return_value={"connectivityState": "connected"})
         mock_api.get_appliance_capabilities = AsyncMock(return_value={})
 
         # Both Appliance() calls raise so the inner create_ex handler fires
@@ -844,12 +757,8 @@ class TestSetupSingleApplianceGaps:
             "applianceData": {"applianceName": "Test"},
         }
 
-        mock_api.get_appliances_info = AsyncMock(
-            return_value=[{"model": "TestModel", "brand": "Electrolux"}]
-        )
-        mock_api.get_appliance_state = AsyncMock(
-            return_value={"connectivityState": "connected"}
-        )
+        mock_api.get_appliances_info = AsyncMock(return_value=[{"model": "TestModel", "brand": "Electrolux"}])
+        mock_api.get_appliance_state = AsyncMock(return_value={"connectivityState": "connected"})
         mock_api.get_appliance_capabilities = AsyncMock(return_value={})
 
         # First Appliance raises ValueError (data validation path),
@@ -862,9 +771,7 @@ class TestSetupSingleApplianceGaps:
 
         assert "APP002" not in coordinator.data["appliances"].appliances
 
-    async def test_network_error_finalization_recovery_also_fails(
-        self, coordinator, mock_api
-    ):
+    async def test_network_error_finalization_recovery_also_fails(self, coordinator, mock_api):
         """Lines 1329-1330: ConnectionError from Appliance() AND recovery also fails."""
         coordinator.data = {"appliances": Appliances({})}
         coordinator._cleanup_appliance_tasks = AsyncMock()
@@ -875,12 +782,8 @@ class TestSetupSingleApplianceGaps:
             "applianceData": {"applianceName": "Test Appliance"},
         }
 
-        mock_api.get_appliances_info = AsyncMock(
-            return_value=[{"model": "TestModel", "brand": "Electrolux"}]
-        )
-        mock_api.get_appliance_state = AsyncMock(
-            return_value={"connectivityState": "connected"}
-        )
+        mock_api.get_appliances_info = AsyncMock(return_value=[{"model": "TestModel", "brand": "Electrolux"}])
+        mock_api.get_appliance_state = AsyncMock(return_value={"connectivityState": "connected"})
         mock_api.get_appliance_capabilities = AsyncMock(return_value={})
 
         # First call: ConnectionError → outer network handler fires
@@ -922,17 +825,15 @@ class TestAsyncUpdateDataGaps:
         coordinator.data = {"appliances": appliances_mock}
 
         # API raises auth error → triggers ConfigEntryAuthFailed path
-        mock_api.get_appliance_state = AsyncMock(
-            side_effect=Exception("401 unauthorized token invalid")
-        )
+        mock_api.get_appliance_state = AsyncMock(side_effect=Exception("401 unauthorized token invalid"))
 
-        with patch("homeassistant.helpers.issue_registry.async_create_issue"):
-            with pytest.raises(ConfigEntryAuthFailed):
-                await coordinator._async_update_data()
+        with (
+            patch("homeassistant.helpers.issue_registry.async_create_issue"),
+            pytest.raises(ConfigEntryAuthFailed),
+        ):
+            await coordinator._async_update_data()
 
-    async def test_exception_result_appended_to_other_errors(
-        self, coordinator, mock_api
-    ):
+    async def test_exception_result_appended_to_other_errors(self, coordinator, mock_api):
         """Lines 1512-1514: result is a non-auth Exception (RuntimeError)."""
         app = MagicMock()
         app.state = {"connectivityState": "connected"}
@@ -944,17 +845,13 @@ class TestAsyncUpdateDataGaps:
         coordinator.data = {"appliances": appliances_mock}
 
         # get_appliance_state succeeds but app_obj.update raises RuntimeError
-        mock_api.get_appliance_state = AsyncMock(
-            return_value={"connectivityState": "connected"}
-        )
+        mock_api.get_appliance_state = AsyncMock(return_value={"connectivityState": "connected"})
 
         # All updates fail → UpdateFailed is raised
         with pytest.raises(UpdateFailed):
             await coordinator._async_update_data()
 
-    async def test_injected_exception_result_hits_isinstance_exception_branch(
-        self, coordinator, mock_api
-    ):
+    async def test_injected_exception_result_hits_isinstance_exception_branch(self, coordinator, mock_api):
         """Line 1512: gather returns Exception object directly (injected via patch)."""
         app = MagicMock()
         app.state = {"connectivityState": "connected"}
@@ -972,16 +869,16 @@ class TestAsyncUpdateDataGaps:
                     a.close()
             return [RuntimeError("injected exception result")]
 
-        with patch(
-            "custom_components.electrolux.coordinator.asyncio.gather",
-            side_effect=_fake_gather,
+        with (
+            patch(
+                "custom_components.electrolux.coordinator.asyncio.gather",
+                side_effect=_fake_gather,
+            ),
+            pytest.raises(UpdateFailed),
         ):
-            with pytest.raises(UpdateFailed):
-                await coordinator._async_update_data()
+            await coordinator._async_update_data()
 
-    async def test_cancelled_error_result_hits_unexpected_else_branch(
-        self, coordinator, mock_api
-    ):
+    async def test_cancelled_error_result_hits_unexpected_else_branch(self, coordinator, mock_api):
         """Line 1515: result is CancelledError (BaseException ≠ Exception) → else branch."""
         app = MagicMock()
         app.state = {"connectivityState": "connected"}
@@ -995,9 +892,7 @@ class TestAsyncUpdateDataGaps:
         # asyncio re-raises CancelledError from wait_for → _update_single re-raises
         # gather(return_exceptions=True) captures it as a result object
         # isinstance(CancelledError(), Exception) is False in Python 3.8+ → else branch
-        mock_api.get_appliance_state = AsyncMock(
-            side_effect=asyncio.CancelledError("cancelled")
-        )
+        mock_api.get_appliance_state = AsyncMock(side_effect=asyncio.CancelledError("cancelled"))
 
         # All updates result in non-success → UpdateFailed raised
         with pytest.raises(UpdateFailed):
@@ -1012,9 +907,7 @@ class TestAsyncUpdateDataGaps:
 class TestCleanupRemovedAppliancesGaps:
     """Tests for cleanup_removed_appliances uncovered paths."""
 
-    async def test_empty_api_list_with_tracked_appliances_skips(
-        self, coordinator, mock_api
-    ):
+    async def test_empty_api_list_with_tracked_appliances_skips(self, coordinator, mock_api):
         """Lines 1615-1618: API returns truthy-but-empty while we track appliances → return early."""
         # A MagicMock is truthy (bypasses 'if not appliances_list: return')
         # but len(MagicMock()) == 0 (hits 'if len(appliances_list) == 0: return')
@@ -1029,13 +922,9 @@ class TestCleanupRemovedAppliancesGaps:
         # APP001 should still be tracked (cleanup skipped due to truthy-but-empty list)
         assert "APP001" in appliances.appliances
 
-    async def test_appliance_id_in_dict_with_none_value_removed(
-        self, coordinator, mock_api
-    ):
+    async def test_appliance_id_in_dict_with_none_value_removed(self, coordinator, mock_api):
         """Line 1668: appliance in missing_ids but dict value is None → else branch."""
-        mock_api.get_appliances_list = AsyncMock(
-            return_value=[{"applianceId": "APP002"}]
-        )
+        mock_api.get_appliances_list = AsyncMock(return_value=[{"applianceId": "APP002"}])
 
         # APP001 key exists but value is None (falsy → else branch)
         appliances_mock = MagicMock()
@@ -1060,9 +949,7 @@ class TestCleanupRemovedAppliancesGaps:
 class TestPerformManualSyncGaps:
     """Tests for perform_manual_sync websocket recovery failure paths."""
 
-    async def test_timeout_recovery_listen_fails_logs_error(
-        self, coordinator, mock_api
-    ):
+    async def test_timeout_recovery_listen_fails_logs_error(self, coordinator, mock_api):
         """Lines 1847-1848: TimeoutError + listen_websocket recovery also raises."""
         # Set up data with capabilities so we skip the reload branch
         _app = MagicMock()
@@ -1083,7 +970,7 @@ class TestPerformManualSyncGaps:
             nonlocal listen_call
             listen_call += 1
             if listen_call == 1:
-                raise asyncio.TimeoutError("step 3 timed out")
+                raise TimeoutError("step 3 timed out")
             # Recovery call also fails
             raise RuntimeError("recovery listen failed")
 
@@ -1094,9 +981,7 @@ class TestPerformManualSyncGaps:
 
         assert listen_call == 2
 
-    async def test_exception_recovery_listen_fails_logs_error(
-        self, coordinator, mock_api
-    ):
+    async def test_exception_recovery_listen_fails_logs_error(self, coordinator, mock_api):
         """Lines 1867-1868: Exception + listen_websocket recovery also raises."""
         _app = MagicMock()
         _app.data.capabilities = {"someCapability": True}
@@ -1106,9 +991,7 @@ class TestPerformManualSyncGaps:
         coordinator._last_manual_sync_time = 0.0
 
         mock_api.disconnect_websocket = AsyncMock(return_value=None)
-        coordinator.async_request_refresh = AsyncMock(
-            side_effect=RuntimeError("refresh exploded")
-        )
+        coordinator.async_request_refresh = AsyncMock(side_effect=RuntimeError("refresh exploded"))
 
         listen_call = 0
 

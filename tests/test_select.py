@@ -112,9 +112,7 @@ class TestElectroluxSelect:
 
     def test_current_option_unknown_value(self, select_entity):
         """Test current_option handles unknown values."""
-        select_entity.appliance_status = {
-            "properties": {"reported": {"testAttr": "UNKNOWN"}}
-        }
+        select_entity.appliance_status = {"properties": {"reported": {"testAttr": "UNKNOWN"}}}
         select_entity.reported_state = {"testAttr": "UNKNOWN"}
         assert select_entity.current_option == "Unknown"
 
@@ -160,19 +158,13 @@ class TestElectroluxSelect:
         select_entity.api = MagicMock()
         select_entity.api.execute_appliance_command = AsyncMock()
         select_entity.is_remote_control_enabled = MagicMock(return_value=True)
-        select_entity.appliance_status = {
-            "properties": {"reported": {"remoteControl": "ENABLED"}}
-        }
+        select_entity.appliance_status = {"properties": {"reported": {"remoteControl": "ENABLED"}}}
 
-        with patch(
-            "custom_components.electrolux.select.format_command_for_appliance"
-        ) as mock_format:
+        with patch("custom_components.electrolux.select.format_command_for_appliance") as mock_format:
             mock_format.return_value = "OPTION2"
             await select_entity.async_select_option("Option 2")
 
-            mock_format.assert_called_once_with(
-                select_entity.capability, "testAttr", "OPTION2"
-            )
+            mock_format.assert_called_once_with(select_entity.capability, "testAttr", "OPTION2")
 
     @pytest.mark.asyncio
     async def test_async_select_option_invalid_option(self, select_entity):
@@ -183,9 +175,7 @@ class TestElectroluxSelect:
     @pytest.mark.asyncio
     async def test_async_select_option_remote_control_disabled(self, select_entity):
         """Test selecting option when remote control is disabled - command is sent optimistically to API."""
-        select_entity.appliance_status = {
-            "properties": {"reported": {"remoteControl": "DISABLED"}}
-        }
+        select_entity.appliance_status = {"properties": {"reported": {"remoteControl": "DISABLED"}}}
 
         # With optimistic sending, command should be sent to API (API will validate)
         # Mock the API to simulate successful call (API would reject if truly disabled)
@@ -196,9 +186,7 @@ class TestElectroluxSelect:
         select_entity.api.execute_appliance_command.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_select_with_user_selections_source(
-        self, mock_coordinator, mock_capability
-    ):
+    async def test_select_with_user_selections_source(self, mock_coordinator, mock_capability):
         """Test select command with userSelections entity source."""
         entity = ElectroluxSelect(
             coordinator=mock_coordinator,
@@ -228,9 +216,7 @@ class TestElectroluxSelect:
             }
         }
 
-        with patch(
-            "custom_components.electrolux.select.format_command_for_appliance"
-        ) as mock_format:
+        with patch("custom_components.electrolux.select.format_command_for_appliance") as mock_format:
             mock_format.return_value = "OPTION1"
             await entity.async_select_option("Option 1")
 
@@ -239,14 +225,10 @@ class TestElectroluxSelect:
             pnc_id, command = call_args[0]
             assert pnc_id == "TEST_PNC"
             # Legacy appliances with userSelections source include programUID
-            assert command == {
-                "userSelections": {"programUID": "TEST_PROGRAM", "testAttr": "OPTION1"}
-            }
+            assert command == {"userSelections": {"programUID": "TEST_PROGRAM", "testAttr": "OPTION1"}}
 
     @pytest.mark.asyncio
-    async def test_select_with_appliance_source(
-        self, mock_coordinator, mock_capability
-    ):
+    async def test_select_with_appliance_source(self, mock_coordinator, mock_capability):
         """Test select command with appliance-type entity source."""
         entity = ElectroluxSelect(
             coordinator=mock_coordinator,
@@ -267,13 +249,9 @@ class TestElectroluxSelect:
         entity.api = MagicMock()
         entity.api.execute_appliance_command = AsyncMock()
         entity.is_remote_control_enabled = MagicMock(return_value=True)
-        entity.appliance_status = {
-            "properties": {"reported": {"remoteControl": "ENABLED"}}
-        }
+        entity.appliance_status = {"properties": {"reported": {"remoteControl": "ENABLED"}}}
 
-        with patch(
-            "custom_components.electrolux.select.format_command_for_appliance"
-        ) as mock_format:
+        with patch("custom_components.electrolux.select.format_command_for_appliance") as mock_format:
             mock_format.return_value = "OPTION1"
             await entity.async_select_option("Option 1")
 
@@ -288,9 +266,7 @@ class TestElectroluxSelect:
         """Test availability when remote control is disabled (but connected)."""
         select_entity.is_connected = MagicMock(return_value=True)
         select_entity.is_remote_control_enabled = MagicMock(return_value=False)
-        assert (
-            select_entity.available
-        )  # Should be available even with remote control disabled
+        assert select_entity.available  # Should be available even with remote control disabled
 
     def test_available_property_remote_control_enabled(self, select_entity):
         """Test availability when remote control is enabled."""
@@ -363,9 +339,7 @@ class TestElectroluxSelect:
         assert list(entity.options_list.values()).count("HEAT") == 1
         assert "heat" not in entity.options_list.values()
 
-    def test_current_option_disabled_value_returns_readonly_label(
-        self, mock_coordinator
-    ):
+    def test_current_option_disabled_value_returns_readonly_label(self, mock_coordinator):
         """Disabled capability value (e.g. mode=OFF) returns a transient
         read-only label, not the empty string. The label is NOT persisted
         in ``options_list`` (#58).
@@ -414,9 +388,7 @@ class TestElectroluxSelect:
         # so SelectEntity does not warn that current_option is missing.
         assert "Off" in entity.options
 
-    def test_current_option_disabled_autoclean_returns_readonly_label(
-        self, mock_coordinator
-    ):
+    def test_current_option_disabled_autoclean_returns_readonly_label(self, mock_coordinator):
         """``mode=autoClean`` is marked disabled in the Bogong AC catalog.
 
         When the appliance enters autoClean on its own (e.g. user pressed
@@ -649,9 +621,7 @@ class TestSelectCurrentOption:
             },
         }
 
-    def test_current_option_non_config_not_supported_returns_empty(
-        self, mock_coordinator, mock_capability
-    ):
+    def test_current_option_non_config_not_supported_returns_empty(self, mock_coordinator, mock_capability):
         """Test current_option returns empty string when non-CONFIG entity is not supported by program."""
         entity = ElectroluxSelect(
             coordinator=mock_coordinator,
@@ -674,9 +644,7 @@ class TestSelectCurrentOption:
         entity._is_supported_by_program = MagicMock(return_value=False)
         assert entity.current_option == ""
 
-    def test_current_option_with_catalog_value_mapping(
-        self, mock_coordinator, mock_capability
-    ):
+    def test_current_option_with_catalog_value_mapping(self, mock_coordinator, mock_capability):
         """Test current_option applies value_mapping from catalog_entry."""
         from custom_components.electrolux.model import ElectroluxDevice
 
@@ -707,9 +675,7 @@ class TestSelectCurrentOption:
         # current_option should map "RAW_VAL" → "OPTION1" → find label "Option 1"
         assert entity.current_option == "Option 1"
 
-    def test_current_option_discovers_and_persists_unknown_value(
-        self, mock_coordinator, mock_capability
-    ):
+    def test_current_option_discovers_and_persists_unknown_value(self, mock_coordinator, mock_capability):
         """Unknown runtime values should become available options and persist."""
         mock_coordinator.config_entry.data = {"api_key": "test-api-key"}
         entity = ElectroluxSelect(
@@ -728,9 +694,7 @@ class TestSelectCurrentOption:
             icon="mdi:toaster-oven",
         )
         entity.hass = mock_coordinator.hass
-        entity.appliance_status = {
-            "properties": {"reported": {"program": "GUIDED_AIRFRY_PLUS"}}
-        }
+        entity.appliance_status = {"properties": {"reported": {"program": "GUIDED_AIRFRY_PLUS"}}}
         entity._reported_state_cache = {"program": "GUIDED_AIRFRY_PLUS"}
 
         assert entity.current_option == "Guided Airfry Plus"
@@ -787,22 +751,16 @@ class TestSelectAsyncSelectOptionAdvanced:
             icon="mdi:test",
         )
         entity.hass = coordinator.hass
-        entity.appliance_status = {
-            "properties": {"reported": {"connectivityState": "connected"}}
-        }
+        entity.appliance_status = {"properties": {"reported": {"connectivityState": "connected"}}}
         entity._reported_state_cache = {"connectivityState": "connected"}
         entity.api = MagicMock()
         entity.api.execute_appliance_command = AsyncMock(return_value=None)
         return entity
 
     @pytest.mark.asyncio
-    async def test_not_supported_by_program_raises(
-        self, mock_coordinator, mock_capability
-    ):
+    async def test_not_supported_by_program_raises(self, mock_coordinator, mock_capability):
         """Test async_select_option raises when non-CONFIG entity is not supported by program."""
-        entity = self._make_select(
-            mock_coordinator, mock_capability, entity_category=EntityCategory.DIAGNOSTIC
-        )
+        entity = self._make_select(mock_coordinator, mock_capability, entity_category=EntityCategory.DIAGNOSTIC)
         entity._is_supported_by_program = MagicMock(return_value=False)
         entity._get_current_program_name = MagicMock(return_value="Cotton")
 
@@ -814,17 +772,13 @@ class TestSelectAsyncSelectOptionAdvanced:
         """Test async_select_option raises HomeAssistantError when appliance is offline."""
         entity = self._make_select(mock_coordinator, mock_capability)
         entity._reported_state_cache = {"connectivityState": "disconnected"}
-        entity.appliance_status = {
-            "properties": {"reported": {"connectivityState": "disconnected"}}
-        }
+        entity.appliance_status = {"properties": {"reported": {"connectivityState": "disconnected"}}}
 
         with pytest.raises(HomeAssistantError, match="offline"):
             await entity.async_select_option("Option 1")
 
     @pytest.mark.asyncio
-    async def test_dam_with_entity_source_not_user_selections(
-        self, mock_coordinator, mock_capability
-    ):
+    async def test_dam_with_entity_source_not_user_selections(self, mock_coordinator, mock_capability):
         """Test DAM appliance with non-userSelections entity_source wraps command correctly."""
         entity = self._make_select(
             mock_coordinator,
@@ -845,9 +799,7 @@ class TestSelectAsyncSelectOptionAdvanced:
         )
 
     @pytest.mark.asyncio
-    async def test_dam_with_user_selections_and_program_uid(
-        self, mock_coordinator, mock_capability
-    ):
+    async def test_dam_with_user_selections_and_program_uid(self, mock_coordinator, mock_capability):
         """Test DAM appliance with userSelections wraps command with programUID."""
         entity = self._make_select(
             mock_coordinator,
@@ -876,17 +828,11 @@ class TestSelectAsyncSelectOptionAdvanced:
 
         entity.api.execute_appliance_command.assert_called_once_with(  # type: ignore[union-attr]
             "1:TEST_PNC",
-            {
-                "commands": [
-                    {"userSelections": {"programUID": "COTTON", "testAttr": "OPTION1"}}
-                ]
-            },
+            {"commands": [{"userSelections": {"programUID": "COTTON", "testAttr": "OPTION1"}}]},
         )
 
     @pytest.mark.asyncio
-    async def test_dam_user_selections_missing_program_uid_raises(
-        self, mock_coordinator, mock_capability
-    ):
+    async def test_dam_user_selections_missing_program_uid_raises(self, mock_coordinator, mock_capability):
         """Test DAM appliance with userSelections but missing programUID raises error."""
         entity = self._make_select(
             mock_coordinator,
@@ -894,11 +840,7 @@ class TestSelectAsyncSelectOptionAdvanced:
             pnc_id="1:TEST_PNC",
             entity_source="userSelections",
         )
-        entity.appliance_status = {
-            "properties": {
-                "reported": {"connectivityState": "connected", "userSelections": {}}
-            }
-        }
+        entity.appliance_status = {"properties": {"reported": {"connectivityState": "connected", "userSelections": {}}}}
         entity._reported_state_cache = {
             "connectivityState": "connected",
             "userSelections": {},
@@ -914,9 +856,7 @@ class TestSelectAsyncSelectOptionAdvanced:
             await entity.async_select_option("Option 1")
 
     @pytest.mark.asyncio
-    async def test_dam_no_source_program_entity_attr(
-        self, mock_coordinator, mock_capability
-    ):
+    async def test_dam_no_source_program_entity_attr(self, mock_coordinator, mock_capability):
         """Test DAM appliance with entity_attr='program' builds userSelections command."""
         entity = self._make_select(
             mock_coordinator,
@@ -946,17 +886,11 @@ class TestSelectAsyncSelectOptionAdvanced:
 
         entity.api.execute_appliance_command.assert_called_once_with(  # type: ignore[union-attr]
             "1:TEST_PNC",
-            {
-                "commands": [
-                    {"userSelections": {"programUID": "COTTON", "program": "OPTION1"}}
-                ]
-            },
+            {"commands": [{"userSelections": {"programUID": "COTTON", "program": "OPTION1"}}]},
         )
 
     @pytest.mark.asyncio
-    async def test_dam_no_source_no_program_entity_attr(
-        self, mock_coordinator, mock_capability
-    ):
+    async def test_dam_no_source_no_program_entity_attr(self, mock_coordinator, mock_capability):
         """Test DAM appliance with entity_attr != 'program' and no source wraps command simply."""
         entity = self._make_select(
             mock_coordinator,
@@ -978,9 +912,7 @@ class TestSelectAsyncSelectOptionAdvanced:
         )
 
     @pytest.mark.asyncio
-    async def test_dam_no_source_program_no_program_uid(
-        self, mock_coordinator, mock_capability
-    ):
+    async def test_dam_no_source_program_no_program_uid(self, mock_coordinator, mock_capability):
         """Test DAM program entity with no programUID in userSelections falls back to simple command."""
         entity = self._make_select(
             mock_coordinator,
@@ -989,11 +921,7 @@ class TestSelectAsyncSelectOptionAdvanced:
             entity_source=None,
             entity_attr="program",
         )
-        entity.appliance_status = {
-            "properties": {
-                "reported": {"connectivityState": "connected", "userSelections": {}}
-            }
-        }
+        entity.appliance_status = {"properties": {"reported": {"connectivityState": "connected", "userSelections": {}}}}
         entity._reported_state_cache = {
             "connectivityState": "connected",
             "userSelections": {},
@@ -1034,9 +962,7 @@ class TestSelectAsyncSelectOptionAdvanced:
         mock_coordinator.handle_authentication_error.assert_called_once_with(auth_ex)
 
     @pytest.mark.asyncio
-    async def test_optimistic_update_applied_on_success(
-        self, mock_coordinator, mock_capability
-    ):
+    async def test_optimistic_update_applied_on_success(self, mock_coordinator, mock_capability):
         """Test _apply_optimistic_update is called after successful command."""
         entity = self._make_select(mock_coordinator, mock_capability)
         entity._apply_optimistic_update = MagicMock()
@@ -1075,9 +1001,7 @@ class TestSelectOptionsFiltering:
             },
         }
 
-    def test_options_filtered_by_program_constraint(
-        self, mock_coordinator, mock_capability
-    ):
+    def test_options_filtered_by_program_constraint(self, mock_coordinator, mock_capability):
         """Test options returns only program-allowed options when constraint is set."""
         entity = ElectroluxSelect(
             coordinator=mock_coordinator,
@@ -1102,9 +1026,7 @@ class TestSelectOptionsFiltering:
         assert "Option 3" in filtered
         assert "Option 2" not in filtered
 
-    def test_options_no_program_constraint_returns_all(
-        self, mock_coordinator, mock_capability
-    ):
+    def test_options_no_program_constraint_returns_all(self, mock_coordinator, mock_capability):
         """Test options returns all options when no program constraint."""
         entity = ElectroluxSelect(
             coordinator=mock_coordinator,
@@ -1148,9 +1070,7 @@ class TestSelectMissingCoveragePaths:
             "access": "readwrite",
             "type": "string",
             "values": {
-                "OPTION_A": {
-                    "access": "read"
-                },  # truthy dict without 'label' -> falls to format_label
+                "OPTION_A": {"access": "read"},  # truthy dict without 'label' -> falls to format_label
                 "OPTION_B": {"label": "Named"},
             },
         }
@@ -1201,9 +1121,7 @@ class TestSelectMissingCoveragePaths:
         )
         entity.hass = mock_coordinator.hass
         entity._reported_state_cache = {"connectivityState": "connected"}
-        entity.appliance_status = {
-            "properties": {"reported": {"connectivityState": "connected"}}
-        }
+        entity.appliance_status = {"properties": {"reported": {"connectivityState": "connected"}}}
         entity.api = MagicMock()
         entity.api.execute_appliance_command = AsyncMock(return_value=None)
 
@@ -1243,9 +1161,7 @@ class TestSelectMissingCoveragePaths:
         )
         entity.hass = mock_coordinator.hass
         entity._reported_state_cache = {"connectivityState": "connected"}
-        entity.appliance_status = {
-            "properties": {"reported": {"connectivityState": "connected"}}
-        }
+        entity.appliance_status = {"properties": {"reported": {"connectivityState": "connected"}}}
 
         generic_err = HomeAssistantError("remote control disabled")
         with (
@@ -1289,9 +1205,7 @@ class TestSelectMissingCoveragePaths:
 
         # Call _handle_coordinator_update - it calls super()._handle_coordinator_update()
         # which reads from coordinator data. We just need to call it without error.
-        with patch(
-            "homeassistant.helpers.entity.Entity.async_write_ha_state"
-        ) as write_mock:
+        with patch("homeassistant.helpers.entity.Entity.async_write_ha_state") as write_mock:
             entity._handle_coordinator_update()
             write_mock.assert_called_once()
         # If we got here without error, super() was called successfully
@@ -1363,9 +1277,7 @@ class TestDiscoveredPrograms:
             icon="mdi:chef-hat",
         )
         entity.hass = mock_coordinator.hass
-        entity.appliance_status = {
-            "properties": {"reported": {"program": "GUIDED_GRILLTHIN"}}
-        }
+        entity.appliance_status = {"properties": {"reported": {"program": "GUIDED_GRILLTHIN"}}}
         entity._reported_state_cache = {"program": "GUIDED_GRILLTHIN"}
 
         with patch.object(entity, "_persist_discovered_program") as mock_persist:
@@ -1401,9 +1313,7 @@ class TestDiscoveredPrograms:
         entity.hass = mock_coordinator.hass
 
         backing = {"Guided Airfry Plus": "GUIDED_AIRFRY_PLUS"}
-        with patch(
-            "custom_components.electrolux.select.Store", new=_fake_store(backing)
-        ):
+        with patch("custom_components.electrolux.select.Store", new=_fake_store(backing)):
             await entity._async_restore_discovered_programs()
 
         assert "Guided Airfry Plus" in entity.options_list
@@ -1439,9 +1349,7 @@ class TestDiscoveredPrograms:
 
         # Persisted store contains a value that is already a capability option
         backing = {"Bake": "BAKE"}
-        with patch(
-            "custom_components.electrolux.select.Store", new=_fake_store(backing)
-        ):
+        with patch("custom_components.electrolux.select.Store", new=_fake_store(backing)):
             await entity._async_restore_discovered_programs()
 
         # BAKE is already in options_list, so _discovered_values should NOT include it
@@ -1478,9 +1386,7 @@ class TestDiscoveredPrograms:
         entity.hass = mock_coordinator.hass
 
         backing = {"Guided Grillthin": "GUIDED_GRILLTHIN"}
-        with patch(
-            "custom_components.electrolux.select.Store", new=_fake_store(backing)
-        ):
+        with patch("custom_components.electrolux.select.Store", new=_fake_store(backing)):
             await entity._async_restore_discovered_programs()
 
         # Simulate program constraint that only allows BAKE, BROIL
@@ -1523,9 +1429,7 @@ class TestDiscoveredPrograms:
         assert entity._discovered_values == set()
 
         # Appliance reports GUIDED_GRILLTHIN in reported state
-        entity.appliance_status = {
-            "properties": {"reported": {"program": "GUIDED_GRILLTHIN"}}
-        }
+        entity.appliance_status = {"properties": {"reported": {"program": "GUIDED_GRILLTHIN"}}}
         entity._reported_state_cache = {"program": "GUIDED_GRILLTHIN"}
 
         # current_option dynamically adds the unknown value
@@ -1539,7 +1443,7 @@ class TestDiscoveredPrograms:
         assert "Guided Grillthin" in entity.options
 
     @pytest.mark.asyncio
-    async def test_discovered_programs_survive_restart(self, mock_coordinator):
+    async def test_discovered_programs_survive_restart(self, mock_coordinator) -> None:
         """A fresh entity restores, from persistent storage, what a prior one saved."""
         capability = {
             "access": "readwrite",
@@ -1550,12 +1454,8 @@ class TestDiscoveredPrograms:
         }
         # Shared backing dict simulates the on-disk .storage file across a restart.
         backing: dict = {}
-        store_patch = patch(
-            "custom_components.electrolux.select.Store", new=_fake_store(backing)
-        )
-        super_patch = patch.object(
-            ElectroluxEntity, "async_added_to_hass", new=AsyncMock()
-        )
+        store_patch = patch("custom_components.electrolux.select.Store", new=_fake_store(backing))
+        super_patch = patch.object(ElectroluxEntity, "async_added_to_hass", new=AsyncMock())
 
         # First entity discovers a program at runtime, which persists it to the store.
         entity1 = ElectroluxSelect(
@@ -1578,9 +1478,7 @@ class TestDiscoveredPrograms:
 
         with store_patch, super_patch:
             await entity1.async_added_to_hass()
-            entity1.appliance_status = {
-                "properties": {"reported": {"program": "GUIDED_GRILLTHIN"}}
-            }
+            entity1.appliance_status = {"properties": {"reported": {"program": "GUIDED_GRILLTHIN"}}}
             entity1._reported_state_cache = {"program": "GUIDED_GRILLTHIN"}
             assert entity1.current_option == "Guided Grillthin"
 
@@ -1646,12 +1544,8 @@ class TestDiscoveredPrograms:
         entity.hass = mock_coordinator.hass
 
         with (
-            patch.object(
-                ElectroluxEntity, "async_added_to_hass", new=AsyncMock()
-            ) as mock_super,
-            patch.object(
-                entity, "_async_restore_discovered_programs", new=AsyncMock()
-            ) as mock_restore,
+            patch.object(ElectroluxEntity, "async_added_to_hass", new=AsyncMock()) as mock_super,
+            patch.object(entity, "_async_restore_discovered_programs", new=AsyncMock()) as mock_restore,
         ):
             await entity.async_added_to_hass()
 
@@ -1685,9 +1579,7 @@ class TestDiscoveredPrograms:
         mock_store = AsyncMock()
         entity._discovered_store = mock_store
 
-        with patch.object(
-            ElectroluxEntity, "async_will_remove_from_hass", new=AsyncMock()
-        ) as mock_super:
+        with patch.object(ElectroluxEntity, "async_will_remove_from_hass", new=AsyncMock()) as mock_super:
             await entity.async_will_remove_from_hass()
 
         mock_super.assert_awaited_once()
@@ -1720,9 +1612,7 @@ class TestDiscoveredPrograms:
         entity.hass = mock_coordinator.hass
         entity._discovered_store = None
 
-        with patch.object(
-            ElectroluxEntity, "async_will_remove_from_hass", new=AsyncMock()
-        ):
+        with patch.object(ElectroluxEntity, "async_will_remove_from_hass", new=AsyncMock()):
             await entity.async_will_remove_from_hass()  # must not raise
 
     @pytest.mark.asyncio
@@ -1761,9 +1651,7 @@ class TestDiscoveredPrograms:
         # Stub only the base lifecycle hook; the real restore must run.
         with (
             patch.object(ElectroluxEntity, "async_added_to_hass", new=AsyncMock()),
-            patch(
-                "custom_components.electrolux.select.Store", new=_fake_store(backing)
-            ),
+            patch("custom_components.electrolux.select.Store", new=_fake_store(backing)),
         ):
             await entity.async_added_to_hass()
 
@@ -1810,7 +1698,7 @@ class TestDiscoveredPrograms:
         assert entity.options_list == {"Bake": "BAKE"}
         assert entity._discovered_values == set()
 
-    def test_discovered_store_key_is_per_entity_and_sanitized(self, mock_coordinator):
+    def test_discovered_store_key_is_per_entity_and_sanitized(self, mock_coordinator) -> None:
         """The Store key derives from unique_id per-entity and has no path separators."""
         capability = {
             "access": "readwrite",

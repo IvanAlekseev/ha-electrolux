@@ -488,10 +488,9 @@ class TestElectroluxSwitch:
                 "custom_components.electrolux.switch.format_command_for_appliance",
                 return_value="ON",
             ),
-            patch.object(switch_entity, "coordinator", mock_coord),
+            patch.object(switch_entity, "coordinator", mock_coord),pytest.raises(AuthenticationError)
         ):
-            with pytest.raises(AuthenticationError):
-                await switch_entity.switch(True)
+            await switch_entity.switch(True)
 
         mock_coord.handle_authentication_error.assert_called_once()
 
@@ -568,10 +567,9 @@ class TestElectroluxSwitch:
             patch(
                 "custom_components.electrolux.switch.format_command_for_appliance",
                 return_value="OFF",
-            ),
+            ),pytest.raises(HomeAssistantError, match="remote control disabled")
         ):
-            with pytest.raises(HomeAssistantError, match="remote control disabled"):
-                await entity.switch(True)
+            await entity.switch(True)
 
     # ... (existing tests in TestElectroluxSwitch class) ...
 

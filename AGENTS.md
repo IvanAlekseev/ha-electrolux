@@ -25,12 +25,12 @@
 
 ## Code style
 
-- Run `uv run ruff check custom_components/electrolux` and `uv run black custom_components/electrolux` before pushing
+- Run `uv run ruff check custom_components/electrolux` before pushing
 - CI will fail on lint/format errors
 
 ## Pre-commit (optional)
 
-A `.pre-commit-config.yaml` is included that mirrors CI checks (ruff, black, mypy on commit; pytest on push).
+A `.pre-commit-config.yaml` is included that mirrors CI checks (ruff, mypy on commit; pytest on push).
 
 ```bash
 pip install pre-commit && pre-commit install

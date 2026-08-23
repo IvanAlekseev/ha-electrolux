@@ -26,9 +26,7 @@ def _make_client(hass=None, config_entry=None):
     """Create an ElectroluxApiClient with SDK internals mocked out."""
     with (
         patch("custom_components.electrolux.api_client.ApplianceClient") as mock_sdk,
-        patch(
-            "custom_components.electrolux.api_client.ElectroluxTokenManager"
-        ) as mock_tm,
+        patch("custom_components.electrolux.api_client.ElectroluxTokenManager") as mock_tm,
     ):
         mock_tm_instance = MagicMock()
         mock_tm_instance.set_auth_error_callback = MagicMock()
@@ -48,9 +46,7 @@ class TestGetElectroluxSession:
     def test_returns_api_client_instance(self):
         with (
             patch("custom_components.electrolux.api_client.ApplianceClient"),
-            patch(
-                "custom_components.electrolux.api_client.ElectroluxTokenManager"
-            ) as mock_tm,
+            patch("custom_components.electrolux.api_client.ElectroluxTokenManager") as mock_tm,
         ):
             mock_tm.return_value = MagicMock()
             hass = MagicMock()
@@ -66,9 +62,7 @@ class TestGetElectroluxSession:
     def test_returns_client_without_hass(self):
         with (
             patch("custom_components.electrolux.api_client.ApplianceClient"),
-            patch(
-                "custom_components.electrolux.api_client.ElectroluxTokenManager"
-            ) as mock_tm,
+            patch("custom_components.electrolux.api_client.ElectroluxTokenManager") as mock_tm,
         ):
             mock_tm.return_value = MagicMock()
             session = get_electrolux_session("api_key", "token", "refresh")
@@ -100,9 +94,8 @@ class TestRetryWithBackoff:
         async def fake_sleep(delay):
             sleep_called.append(delay)
 
-        with patch("asyncio.sleep", side_effect=fake_sleep):
-            with pytest.raises(Exception):
-                await retry_with_backoff(net_fail, max_retries=2, base_delay=0.01)
+        with patch("asyncio.sleep", side_effect=fake_sleep), pytest.raises(ConnectionError):
+            await retry_with_backoff(net_fail, max_retries=2, base_delay=0.01)
 
         # Sleep was called at least once (backoff triggered)
         assert len(sleep_called) >= 1
@@ -118,9 +111,8 @@ class TestRetryWithBackoff:
         async def fake_sleep(delay):
             sleep_called.append(delay)
 
-        with patch("asyncio.sleep", side_effect=fake_sleep):
-            with pytest.raises(Exception):
-                await retry_with_backoff(timeout_fail, max_retries=2, base_delay=0.01)
+        with patch("asyncio.sleep", side_effect=fake_sleep), pytest.raises(TimeoutError):
+            await retry_with_backoff(timeout_fail, max_retries=2, base_delay=0.01)
 
         assert len(sleep_called) >= 1
 
@@ -130,16 +122,13 @@ class TestRetryWithBackoff:
         sleep_called = []
 
         async def asyncio_timeout():
-            raise asyncio.TimeoutError()
+            raise TimeoutError()
 
         async def fake_sleep(delay):
             sleep_called.append(delay)
 
-        with patch("asyncio.sleep", side_effect=fake_sleep):
-            with pytest.raises(Exception):
-                await retry_with_backoff(
-                    asyncio_timeout, max_retries=2, base_delay=0.01
-                )
+        with patch("asyncio.sleep", side_effect=fake_sleep), pytest.raises(TimeoutError):
+            await retry_with_backoff(asyncio_timeout, max_retries=2, base_delay=0.01)
 
         assert len(sleep_called) >= 1
 
@@ -151,11 +140,8 @@ class TestRetryWithBackoff:
         async def always_fails():
             raise ConnectionError("always fails")
 
-        with patch("asyncio.sleep", new_callable=AsyncMock):
-            with pytest.raises(Exception):
-                await retry_with_backoff(
-                    always_fails, max_retries=0, base_delay=0.01, logger=mock_logger
-                )
+        with patch("asyncio.sleep", new_callable=AsyncMock), pytest.raises(ConnectionError):
+            await retry_with_backoff(always_fails, max_retries=0, base_delay=0.01, logger=mock_logger)
 
         # With max_retries=0, there's exactly one attempt, error should be logged
         assert mock_logger.error.called
@@ -183,15 +169,14 @@ class TestRetryWithBackoff:
         async def mock_sleep(delay):
             sleep_calls.append(delay)
 
-        with patch("asyncio.sleep", side_effect=mock_sleep):
-            with pytest.raises(Exception):
-                await retry_with_backoff(
-                    always_fails,
-                    max_retries=5,
-                    base_delay=10.0,
-                    max_delay=15.0,
-                    backoff_factor=3.0,
-                )
+        with patch("asyncio.sleep", side_effect=mock_sleep), pytest.raises(ConnectionError):
+            await retry_with_backoff(
+                always_fails,
+                max_retries=5,
+                base_delay=10.0,
+                max_delay=15.0,
+                backoff_factor=3.0,
+            )
 
         # First sleep should be ~10, subsequent (if reached) should be capped at 15
         # At minimum the first sleep was called
@@ -206,11 +191,8 @@ class TestRetryWithBackoff:
         async def always_fails():
             raise ConnectionError("net fail")
 
-        with patch("asyncio.sleep", new_callable=AsyncMock):
-            with pytest.raises(Exception):
-                await retry_with_backoff(
-                    always_fails, max_retries=0, base_delay=0.01, logger=mock_logger
-                )
+        with patch("asyncio.sleep", new_callable=AsyncMock), pytest.raises(ConnectionError):
+            await retry_with_backoff(always_fails, max_retries=0, base_delay=0.01, logger=mock_logger)
 
         # Logger.error should have been called (max_retries=0, single attempt)
         assert mock_logger.error.called
@@ -251,7 +233,7 @@ class TestSafeApiCall:
     @pytest.mark.asyncio
     async def test_auth_error_401_raises_config_entry_auth_failed(self):
         async def auth_fail():
-            raise Exception("401 Unauthorized")
+            raise RuntimeError("401 Unauthorized")
 
         with pytest.raises(ConfigEntryAuthFailed):
             await safe_api_call(auth_fail, "test op", retry_network_errors=False)
@@ -259,7 +241,7 @@ class TestSafeApiCall:
     @pytest.mark.asyncio
     async def test_auth_error_unauthorized_keyword(self):
         async def auth_fail():
-            raise Exception("unauthorized access denied")
+            raise RuntimeError("unauthorized access denied")
 
         with pytest.raises(ConfigEntryAuthFailed):
             await safe_api_call(auth_fail, "test op", retry_network_errors=False)
@@ -267,7 +249,7 @@ class TestSafeApiCall:
     @pytest.mark.asyncio
     async def test_auth_error_invalid_grant(self):
         async def auth_fail():
-            raise Exception("invalid grant error")
+            raise RuntimeError("invalid grant error")
 
         with pytest.raises(ConfigEntryAuthFailed):
             await safe_api_call(auth_fail, "test op", retry_network_errors=False)
@@ -275,7 +257,7 @@ class TestSafeApiCall:
     @pytest.mark.asyncio
     async def test_auth_error_token_keyword(self):
         async def auth_fail():
-            raise Exception("token expired")
+            raise RuntimeError("token expired")
 
         with pytest.raises(ConfigEntryAuthFailed):
             await safe_api_call(auth_fail, "test op", retry_network_errors=False)
@@ -283,7 +265,7 @@ class TestSafeApiCall:
     @pytest.mark.asyncio
     async def test_auth_error_forbidden_keyword(self):
         async def auth_fail():
-            raise Exception("403 forbidden")
+            raise RuntimeError("403 forbidden")
 
         with pytest.raises(ConfigEntryAuthFailed):
             await safe_api_call(auth_fail, "test op", retry_network_errors=False)
@@ -291,7 +273,7 @@ class TestSafeApiCall:
     @pytest.mark.asyncio
     async def test_auth_error_auth_keyword(self):
         async def auth_fail():
-            raise Exception("authentication failed")
+            raise RuntimeError("authentication failed")
 
         with pytest.raises(ConfigEntryAuthFailed):
             await safe_api_call(auth_fail, "test op", retry_network_errors=False)
@@ -299,7 +281,7 @@ class TestSafeApiCall:
     @pytest.mark.asyncio
     async def test_rate_limit_429(self):
         async def rate_fail():
-            raise Exception("429 Too Many Requests")
+            raise RuntimeError("429 Too Many Requests")
 
         with pytest.raises(HomeAssistantError, match="Too many requests"):
             await safe_api_call(rate_fail, "test op", retry_network_errors=False)
@@ -307,7 +289,7 @@ class TestSafeApiCall:
     @pytest.mark.asyncio
     async def test_rate_limit_throttled(self):
         async def rate_fail():
-            raise Exception("request throttled")
+            raise RuntimeError("request throttled")
 
         with pytest.raises(HomeAssistantError, match="Too many requests"):
             await safe_api_call(rate_fail, "test op", retry_network_errors=False)
@@ -315,12 +297,10 @@ class TestSafeApiCall:
     @pytest.mark.asyncio
     async def test_generic_error_raises_home_assistant_error(self):
         async def generic_fail():
-            raise Exception("something broke")
+            raise RuntimeError("something broke")
 
         with pytest.raises(HomeAssistantError, match="Operation failed"):
-            await safe_api_call(
-                generic_fail, "my operation", retry_network_errors=False
-            )
+            await safe_api_call(generic_fail, "my operation", retry_network_errors=False)
 
     @pytest.mark.asyncio
     async def test_uses_default_logger_when_none_provided(self):
@@ -359,37 +339,37 @@ class TestTokenRefreshHandlerEmit:
         return record
 
     def test_permanent_error_schedules_reauth(self):
-        handler, client, hass = self._make_handler()
+        handler, _client, hass = self._make_handler()
         record = self._make_record("Refresh token is invalid")
         handler.emit(record)
         hass.loop.call_soon_threadsafe.assert_called_once()
 
     def test_invalid_grant_schedules_reauth(self):
-        handler, client, hass = self._make_handler()
+        handler, _client, hass = self._make_handler()
         record = self._make_record("invalid grant received from server")
         handler.emit(record)
         hass.loop.call_soon_threadsafe.assert_called_once()
 
     def test_invalid_refresh_token_schedules_reauth(self):
-        handler, client, hass = self._make_handler()
+        handler, _client, hass = self._make_handler()
         record = self._make_record("invalid refresh token provided")
         handler.emit(record)
         hass.loop.call_soon_threadsafe.assert_called_once()
 
     def test_refresh_token_expired_schedules_reauth(self):
-        handler, client, hass = self._make_handler()
+        handler, _client, hass = self._make_handler()
         record = self._make_record("refresh token expired")
         handler.emit(record)
         hass.loop.call_soon_threadsafe.assert_called_once()
 
     def test_non_permanent_error_does_not_schedule_reauth(self):
-        handler, client, hass = self._make_handler()
+        handler, _client, hass = self._make_handler()
         record = self._make_record("Some other error occurred")
         handler.emit(record)
         hass.loop.call_soon_threadsafe.assert_not_called()
 
     def test_exception_in_emit_is_swallowed(self):
-        handler, client, hass = self._make_handler()
+        handler, _client, hass = self._make_handler()
         # Make call_soon_threadsafe raise
         hass.loop.call_soon_threadsafe.side_effect = RuntimeError("loop error")
         record = self._make_record("Refresh token is invalid")
@@ -397,7 +377,7 @@ class TestTokenRefreshHandlerEmit:
         handler.emit(record)
 
     def test_exception_in_format_is_swallowed(self):
-        handler, client, hass = self._make_handler()
+        handler, _client, _hass = self._make_handler()
         record = self._make_record("Refresh token is invalid")
         # Make format raise
         with patch.object(handler, "format", side_effect=Exception("format error")):
@@ -413,9 +393,7 @@ class TestApiClientInit:
     def test_init_without_hass_no_handler_attached(self):
         with (
             patch("custom_components.electrolux.api_client.ApplianceClient"),
-            patch(
-                "custom_components.electrolux.api_client.ElectroluxTokenManager"
-            ) as mock_tm,
+            patch("custom_components.electrolux.api_client.ElectroluxTokenManager") as mock_tm,
         ):
             mock_tm.return_value = MagicMock()
             client = ElectroluxApiClient("key", "access", "refresh", hass=None)
@@ -426,12 +404,8 @@ class TestApiClientInit:
         hass = MagicMock()
         with (
             patch("custom_components.electrolux.api_client.ApplianceClient"),
-            patch(
-                "custom_components.electrolux.api_client.ElectroluxTokenManager"
-            ) as mock_tm,
-            patch(
-                "custom_components.electrolux.api_client.logging.getLogger"
-            ) as mock_get_logger,
+            patch("custom_components.electrolux.api_client.ElectroluxTokenManager") as mock_tm,
+            patch("custom_components.electrolux.api_client.logging.getLogger") as mock_get_logger,
         ):
             mock_tm_instance = MagicMock()
             mock_tm_instance.set_auth_error_callback = MagicMock()
@@ -448,9 +422,7 @@ class TestApiClientInit:
         hass = MagicMock()
         with (
             patch("custom_components.electrolux.api_client.ApplianceClient"),
-            patch(
-                "custom_components.electrolux.api_client.ElectroluxTokenManager"
-            ) as mock_tm,
+            patch("custom_components.electrolux.api_client.ElectroluxTokenManager") as mock_tm,
             patch(
                 "custom_components.electrolux.api_client._TokenRefreshHandler",
                 side_effect=Exception("handler init error"),
@@ -511,9 +483,7 @@ class TestTriggerReauth:
         hass.async_create_task.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_trigger_reauth_without_coordinator_does_not_schedule(
-        self, monkeypatch
-    ):
+    async def test_trigger_reauth_without_coordinator_does_not_schedule(self, monkeypatch):
         hass = MagicMock()
         hass.loop = MagicMock()
         hass.loop.call_soon_threadsafe = MagicMock()
@@ -607,7 +577,7 @@ class TestHandleApiCall:
         client = _make_client()
 
         async def coro():
-            raise Exception("401 Unauthorized")
+            raise RuntimeError("401 Unauthorized")
 
         with pytest.raises(ConfigEntryAuthFailed):
             await client._handle_api_call(coro())
@@ -617,7 +587,7 @@ class TestHandleApiCall:
         client = _make_client()
 
         async def coro():
-            raise Exception("unauthorized request")
+            raise RuntimeError("unauthorized request")
 
         with pytest.raises(ConfigEntryAuthFailed):
             await client._handle_api_call(coro())
@@ -627,7 +597,7 @@ class TestHandleApiCall:
         client = _make_client()
 
         async def coro():
-            raise Exception("invalid grant")
+            raise RuntimeError("invalid grant")
 
         with pytest.raises(ConfigEntryAuthFailed):
             await client._handle_api_call(coro())
@@ -637,7 +607,7 @@ class TestHandleApiCall:
         client = _make_client()
 
         async def coro():
-            raise Exception("token has expired")
+            raise RuntimeError("token has expired")
 
         with pytest.raises(ConfigEntryAuthFailed):
             await client._handle_api_call(coro())
@@ -647,7 +617,7 @@ class TestHandleApiCall:
         client = _make_client()
 
         async def coro():
-            raise Exception("403 forbidden access")
+            raise RuntimeError("403 forbidden access")
 
         with pytest.raises(ConfigEntryAuthFailed):
             await client._handle_api_call(coro())
@@ -693,9 +663,7 @@ class TestGetAppliancesList:
     @pytest.mark.asyncio
     async def test_model_extracted_from_pnc_when_unknown(self, monkeypatch):
         client = _make_client()
-        appliance = self._make_appliance(
-            "944188772_00:ABCDEF", "Fridge", "REF", "Unknown"
-        )
+        appliance = self._make_appliance("944188772_00:ABCDEF", "Fridge", "REF", "Unknown")
         client._handle_api_call = AsyncMock(return_value=[appliance])
 
         result = await client.get_appliances_list()
@@ -738,9 +706,7 @@ class TestGetAppliancesInfo:
     @pytest.mark.asyncio
     async def test_returns_info_with_known_model(self, monkeypatch):
         client = _make_client()
-        client._handle_api_call = AsyncMock(
-            return_value=self._make_details("OvenModel123")
-        )
+        client._handle_api_call = AsyncMock(return_value=self._make_details("OvenModel123"))
 
         result = await client.get_appliances_info(["app1"])
         assert len(result) == 1
@@ -1179,9 +1145,7 @@ class TestExecuteApplianceCommand:
     @pytest.mark.asyncio
     async def test_reraises_exception(self):
         client = _make_client()
-        client._handle_api_call = AsyncMock(
-            side_effect=ConfigEntryAuthFailed("auth fail")
-        )
+        client._handle_api_call = AsyncMock(side_effect=ConfigEntryAuthFailed("auth fail"))
 
         with pytest.raises(ConfigEntryAuthFailed):
             await client.execute_appliance_command("app1", {"temp": 180})
@@ -1284,9 +1248,7 @@ class TestWatchForApplianceStateUpdatesException:
         client = _make_client()
 
         # Make remove_all_listeners_by_appliance_id raise an exception
-        client._client.remove_all_listeners_by_appliance_id = MagicMock(
-            side_effect=RuntimeError("SSE setup exploded")
-        )
+        client._client.remove_all_listeners_by_appliance_id = MagicMock(side_effect=RuntimeError("SSE setup exploded"))
 
         with pytest.raises(RuntimeError, match="SSE setup exploded"):
             await client.watch_for_appliance_state_updates(["APP1"], lambda x: None)

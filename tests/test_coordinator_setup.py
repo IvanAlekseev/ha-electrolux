@@ -194,7 +194,7 @@ class TestSetupSingleAppliance:
         coord.api.get_appliances_info = AsyncMock(return_value=mock_appliance_info())
         coord.api.get_appliance_state = AsyncMock(return_value=mock_appliance_state())
         coord.api.get_appliance_capabilities = AsyncMock(
-            side_effect=asyncio.TimeoutError()
+            side_effect=TimeoutError()
         )
         coord._schedule_capability_retry = MagicMock()
 
@@ -226,7 +226,7 @@ class TestSetupSingleAppliance:
         """TimeoutError on info/state gather → minimal appliance with disconnected state."""
         coord = make_coordinator()
         coord.api.get_appliances_info = AsyncMock(
-            side_effect=asyncio.TimeoutError("timeout")
+            side_effect=TimeoutError("timeout")
         )
         coord.api.get_appliance_state = AsyncMock(return_value=mock_appliance_state())
         coord.api.get_appliance_capabilities = AsyncMock(return_value={})
@@ -484,7 +484,7 @@ class TestCloseWebsocket:
         """close_websocket handles TimeoutError from api.close gracefully."""
         coord = make_coordinator()
         coord.renew_task = None
-        coord.api.close = AsyncMock(side_effect=asyncio.TimeoutError())
+        coord.api.close = AsyncMock(side_effect=TimeoutError())
 
         # Should not raise
         await coord.close_websocket()

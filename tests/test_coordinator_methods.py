@@ -779,9 +779,11 @@ class TestCleanupApplianceTasks:
         task = MagicMock(spec=asyncio.Task)
         task.done.return_value = False
 
-        with patch("asyncio.gather", new=AsyncMock(return_value=[])):
-            with patch("asyncio.shield", new=AsyncMock(return_value=[])):
-                await coordinator._cleanup_appliance_tasks([task], "app1")
+        with (
+            patch("asyncio.gather", new=AsyncMock(return_value=[])),
+            patch("asyncio.shield", new=AsyncMock(return_value=[])),
+        ):
+            await coordinator._cleanup_appliance_tasks([task], "app1")
 
         task.cancel.assert_called_once()
 
@@ -790,9 +792,11 @@ class TestCleanupApplianceTasks:
         task = MagicMock(spec=asyncio.Task)
         task.done.return_value = True
 
-        with patch("asyncio.gather", new=AsyncMock(return_value=[])):
-            with patch("asyncio.shield", new=AsyncMock(return_value=[])):
-                await coordinator._cleanup_appliance_tasks([task], "app1")
+        with (
+            patch("asyncio.gather", new=AsyncMock(return_value=[])),
+            patch("asyncio.shield", new=AsyncMock(return_value=[])),
+        ):
+            await coordinator._cleanup_appliance_tasks([task], "app1")
 
         task.cancel.assert_not_called()
 
@@ -806,10 +810,12 @@ class TestCleanupApplianceTasks:
         task = MagicMock(spec=asyncio.Task)
         task.done.return_value = False
 
-        with patch("asyncio.shield", side_effect=asyncio.CancelledError):
-            with patch("asyncio.gather", new=AsyncMock(return_value=[])):
-                # Should not propagate the error
-                await coordinator._cleanup_appliance_tasks([task], "app1")
+        with (
+            patch("asyncio.shield", side_effect=asyncio.CancelledError),
+            patch("asyncio.gather", new=AsyncMock(return_value=[])),
+        ):
+            # Should not propagate the error
+            await coordinator._cleanup_appliance_tasks([task], "app1")
 
 
 # ===========================================================================
@@ -875,9 +881,8 @@ class TestDeferredUpdate:
         coordinator.data = {"appliances": aps}
         coordinator.api.get_appliance_state = AsyncMock(side_effect=asyncio.CancelledError())
 
-        with patch("asyncio.sleep", new=AsyncMock()):
-            with pytest.raises(asyncio.CancelledError):
-                await coordinator.deferred_update("app1", 1)
+        with patch("asyncio.sleep", new=AsyncMock()), pytest.raises(asyncio.CancelledError):
+            await coordinator.deferred_update("app1", 1)
 
     @pytest.mark.asyncio
     async def test_raises_update_failed_on_value_error(self, coordinator):
@@ -955,9 +960,8 @@ class TestRefreshAfterApplianceStateChange:
         coordinator.data = {"appliances": aps}
         coordinator.api.get_appliance_state = AsyncMock(side_effect=asyncio.CancelledError())
 
-        with patch("asyncio.sleep", new=AsyncMock()):
-            with pytest.raises(asyncio.CancelledError):
-                await coordinator._refresh_after_appliance_state_change("app1")
+        with patch("asyncio.sleep", new=AsyncMock()), pytest.raises(asyncio.CancelledError):
+            await coordinator._refresh_after_appliance_state_change("app1")
 
 
 # ===========================================================================
@@ -1005,7 +1009,7 @@ class TestRefreshAllAppliances:
             nonlocal call_count
             call_count += 1
             if app_id == "app1":
-                raise Exception("app1 error")
+                raise RuntimeError("app1 error")
             return {"connectivityState": "connected"}
 
         coordinator.api.get_appliance_state = mock_get_state
@@ -1406,10 +1410,12 @@ class TestCleanupApplianceTasksException:
         task = MagicMock(spec=asyncio.Task)
         task.done.return_value = False
 
-        with patch("asyncio.shield", side_effect=RuntimeError("unexpected")):
-            with patch("asyncio.gather", new=AsyncMock(return_value=[])):
-                # Should not raise
-                await coordinator._cleanup_appliance_tasks([task], "app1")
+        with (
+            patch("asyncio.shield", side_effect=RuntimeError("unexpected")),
+            patch("asyncio.gather", new=AsyncMock(return_value=[])),
+        ):
+            # Should not raise
+            await coordinator._cleanup_appliance_tasks([task], "app1")
 
 
 # ===========================================================================

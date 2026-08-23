@@ -19,7 +19,7 @@ import inspect
 # to avoid DeprecationWarning emitted by some third-party packages.
 try:
     if getattr(asyncio, "iscoroutinefunction", None) is not inspect.iscoroutinefunction:
-        asyncio.iscoroutinefunction = inspect.iscoroutinefunction  # type: ignore[attr-defined]
+        asyncio.iscoroutinefunction = inspect.iscoroutinefunction  # type: ignore[assignment]
 except Exception:
     # If this environment doesn't expose or allow reassignment, skip silently.
     pass
@@ -34,7 +34,7 @@ try:
 
     # Only replace if the current implementation emits a warning.
     if getattr(web.Application, "__init_subclass__", None) is not _noop_init_subclass:
-        web.Application.__init_subclass__ = _noop_init_subclass  # type: ignore[attr-defined]
+        web.Application.__init_subclass__ = _noop_init_subclass  # type: ignore[method-assign]
 except Exception:
     # If aiohttp isn't available or monkeypatching fails, continue without error.
     pass

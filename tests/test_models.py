@@ -157,9 +157,7 @@ class TestApplianceType:
         assert app.appliance_type == "OV"
 
     def test_no_applianceInfo(self):
-        app = _make_appliance(
-            state={"properties": {"reported": {"connectivityState": "connected"}}}
-        )
+        app = _make_appliance(state={"properties": {"reported": {"connectivityState": "connected"}}})
         assert app.appliance_type is None
 
     def test_empty_state(self):
@@ -168,9 +166,7 @@ class TestApplianceType:
 
     def test_constructor_param_overrides_reported_state(self):
         """appliance_type kwarg takes precedence over applianceInfo in reported_state."""
-        state_with_ov = {
-            "properties": {"reported": {"applianceInfo": {"applianceType": "OV"}}}
-        }
+        state_with_ov = {"properties": {"reported": {"applianceInfo": {"applianceType": "OV"}}}}
         app = Appliance(
             coordinator=MagicMock(),
             name="Test",
@@ -254,9 +250,7 @@ class TestApplianceUpdateReportedData:
         app.entities = []
         app._catalog_cache = {}
 
-        app.update_reported_data(
-            {"property": "userSelections/program", "value": "GRILL"}
-        )
+        app.update_reported_data({"property": "userSelections/program", "value": "GRILL"})
         assert app.reported_state["userSelections"]["program"] == "GRILL"
 
     def test_nested_creates_missing_intermediate(self):
@@ -334,7 +328,7 @@ class TestAppliances:
         assert apps.get_appliance("UNKNOWN") is None
 
     def test_get_appliances(self):
-        apps, a1, a2 = self._make()
+        apps, _a1, _a2 = self._make()
         result = apps.get_appliances()
         assert "aaa" in result
         assert "bbb" in result
@@ -406,11 +400,7 @@ class TestInitializeConstantValues:
         from custom_components.electrolux.model import ElectroluxDevice
 
         app = _make_app_full()
-        app._catalog_cache = {
-            "someConstant": ElectroluxDevice(
-                capability_info={"access": "constant", "default": 42}
-            )
-        }
+        app._catalog_cache = {"someConstant": ElectroluxDevice(capability_info={"access": "constant", "default": 42})}
         app.initialize_constant_values()
         assert app.reported_state["someConstant"] == 42
 
@@ -420,11 +410,7 @@ class TestInitializeConstantValues:
 
         app = _make_app_full()
         app.reported_state["someConstant"] = 99
-        app._catalog_cache = {
-            "someConstant": ElectroluxDevice(
-                capability_info={"access": "constant", "default": 42}
-            )
-        }
+        app._catalog_cache = {"someConstant": ElectroluxDevice(capability_info={"access": "constant", "default": 42})}
         app.initialize_constant_values()
         assert app.reported_state["someConstant"] == 99  # unchanged
 
@@ -433,11 +419,7 @@ class TestInitializeConstantValues:
         from custom_components.electrolux.model import ElectroluxDevice
 
         app = _make_app_full()
-        app._catalog_cache = {
-            "rwKey": ElectroluxDevice(
-                capability_info={"access": "readwrite", "default": 10}
-            )
-        }
+        app._catalog_cache = {"rwKey": ElectroluxDevice(capability_info={"access": "readwrite", "default": 10})}
         app.initialize_constant_values()
         assert "rwKey" not in app.reported_state
 
@@ -446,9 +428,7 @@ class TestInitializeConstantValues:
         from custom_components.electrolux.model import ElectroluxDevice
 
         app = _make_app_full()
-        app._catalog_cache = {
-            "constNoDefault": ElectroluxDevice(capability_info={"access": "constant"})
-        }
+        app._catalog_cache = {"constNoDefault": ElectroluxDevice(capability_info={"access": "constant"})}
         app.initialize_constant_values()
         assert "constNoDefault" not in app.reported_state
 
@@ -457,9 +437,7 @@ class TestInitializeConstantValues:
         from custom_components.electrolux.model import ElectroluxDevice
 
         app = _make_app_full(state={})
-        app._catalog_cache = {
-            "c": ElectroluxDevice(capability_info={"access": "constant", "default": 1})
-        }
+        app._catalog_cache = {"c": ElectroluxDevice(capability_info={"access": "constant", "default": 1})}
         # Must not raise
         app.initialize_constant_values()
 
@@ -522,11 +500,7 @@ class TestUpdateReportedDataConstantsAndExceptions:
         from custom_components.electrolux.model import ElectroluxDevice
 
         app = _make_app_full()
-        app._catalog_cache = {
-            "constKey": ElectroluxDevice(
-                capability_info={"access": "constant", "default": 55}
-            )
-        }
+        app._catalog_cache = {"constKey": ElectroluxDevice(capability_info={"access": "constant", "default": 55})}
         app.reported_state["constKey"] = 55
         app.entities = []
 
@@ -538,11 +512,7 @@ class TestUpdateReportedDataConstantsAndExceptions:
         from custom_components.electrolux.model import ElectroluxDevice
 
         app = _make_app_full()
-        app._catalog_cache = {
-            "constKey": ElectroluxDevice(
-                capability_info={"access": "constant", "default": 55}
-            )
-        }
+        app._catalog_cache = {"constKey": ElectroluxDevice(capability_info={"access": "constant", "default": 55})}
         app.reported_state["constKey"] = 55
         app.entities = []
 
@@ -611,9 +581,7 @@ class TestGetEntity:
         """Read string capability → SENSOR entity returned (applianceState is a sensor)."""
         from custom_components.electrolux.sensor import ElectroluxSensor
 
-        app = self._app_with_data(
-            {"applianceState": {"access": "read", "type": "string"}}
-        )
+        app = self._app_with_data({"applianceState": {"access": "read", "type": "string"}})
         entities = app.get_entity("applianceState")
         assert isinstance(entities, list)
         assert len(entities) >= 1
@@ -623,9 +591,7 @@ class TestGetEntity:
         """connectivityState catalog overrides entity type to BinarySensor."""
         from custom_components.electrolux.binary_sensor import ElectroluxBinarySensor
 
-        app = self._app_with_data(
-            {"connectivityState": {"access": "read", "type": "string"}}
-        )
+        app = self._app_with_data({"connectivityState": {"access": "read", "type": "string"}})
         entities = app.get_entity("connectivityState")
         assert isinstance(entities, list)
         assert len(entities) >= 1
@@ -633,9 +599,7 @@ class TestGetEntity:
 
     def test_returns_empty_for_unrecognised_type(self):
         """Capability that cannot be mapped → empty list."""
-        app = self._app_with_data(
-            {"unknownAttr": {"access": "readwrite", "type": "unknown_type_xyz"}}
-        )
+        app = self._app_with_data({"unknownAttr": {"access": "readwrite", "type": "unknown_type_xyz"}})
         entities = app.get_entity("unknownAttr")
         assert entities == []
 
@@ -732,9 +696,7 @@ class TestGetEntity:
 
     def test_capability_not_in_api_or_catalog_returns_empty(self):
         """Capability with no type determined → empty list."""
-        app = self._app_with_data(
-            {"totallyUnknown": {"access": "readwrite", "type": "exotic_type"}}
-        )
+        app = self._app_with_data({"totallyUnknown": {"access": "readwrite", "type": "exotic_type"}})
         entities = app.get_entity("totallyUnknown")
         assert entities == []
 
@@ -792,18 +754,14 @@ class TestApplianceSetup:
     def test_setup_creates_sensor_entity(self):
         """setup() creates at least one sensor from a read string capability."""
         app = _make_app_full()
-        data = self._make_data(
-            {"connectivityState": {"access": "read", "type": "string"}}
-        )
+        data = self._make_data({"connectivityState": {"access": "read", "type": "string"}})
         app.setup(data)
         assert isinstance(app.entities, list)
 
     def test_setup_deduplicates_entities(self):
         """Duplicate unique_ids result in only one entity kept."""
         app = _make_app_full()
-        data = self._make_data(
-            {"connectivityState": {"access": "read", "type": "string"}}
-        )
+        data = self._make_data({"connectivityState": {"access": "read", "type": "string"}})
         app.setup(data)
         if app.entities:
             ids = [e.unique_id for e in app.entities]
@@ -839,9 +797,7 @@ class TestApplianceSetup:
     def test_setup_calls_entity_setup(self):
         """Each created entity has setup() called on it."""
         app = _make_app_full()
-        data = self._make_data(
-            {"connectivityState": {"access": "read", "type": "string"}}
-        )
+        data = self._make_data({"connectivityState": {"access": "read", "type": "string"}})
         app.setup(data)
         # Verify all entities were set up (no crash in entity.setup())
         for ent in app.entities:
@@ -946,9 +902,7 @@ class TestApplianceSetup:
         data = self._make_data(capabilities={}, reported=app.reported_state)
         app.setup(data)
 
-        display_light_entities = [
-            entity for entity in app.entities if entity.entity_attr == "displayLight"
-        ]
+        display_light_entities = [entity for entity in app.entities if entity.entity_attr == "displayLight"]
         assert len(display_light_entities) == 1
         assert isinstance(display_light_entities[0], ElectroluxSensor)
 
@@ -970,9 +924,7 @@ class TestApplianceSetup:
         data = self._make_data(capabilities={}, reported=app.reported_state)
         app.setup(data)
 
-        preselect_entities = [
-            entity for entity in app.entities if entity.entity_attr == "preSelectLast"
-        ]
+        preselect_entities = [entity for entity in app.entities if entity.entity_attr == "preSelectLast"]
         assert len(preselect_entities) == 1
         assert isinstance(preselect_entities[0], ElectroluxBinarySensor)
 
@@ -994,9 +946,7 @@ class TestApplianceSetup:
         data = self._make_data(capabilities={}, reported=app.reported_state)
         app.setup(data)
 
-        display_light_entities = [
-            entity for entity in app.entities if entity.entity_attr == "displayLight"
-        ]
+        display_light_entities = [entity for entity in app.entities if entity.entity_attr == "displayLight"]
         assert len(display_light_entities) == 1
         assert isinstance(display_light_entities[0], ElectroluxSensor)
 
@@ -1018,9 +968,7 @@ class TestApplianceSetup:
         data = self._make_data(capabilities={}, reported=app.reported_state)
         app.setup(data)
 
-        rssi_entities = [
-            entity for entity in app.entities if entity.entity_attr == "RSSI"
-        ]
+        rssi_entities = [entity for entity in app.entities if entity.entity_attr == "RSSI"]
         assert len(rssi_entities) == 1
         assert isinstance(rssi_entities[0], ElectroluxSensor)
 
@@ -1093,11 +1041,7 @@ class TestGetEntityExtended:
         from custom_components.electrolux.model import ElectroluxDevice
 
         app = self._app_custom(
-            {
-                "climateCtrl": ElectroluxDevice(
-                    capability_info={"access": "readwrite", "type": "climate"}
-                )
-            }
+            {"climateCtrl": ElectroluxDevice(capability_info={"access": "readwrite", "type": "climate"})}
         )
         entities = app.get_entity("climateCtrl")
         assert isinstance(entities, list)
@@ -1108,9 +1052,7 @@ class TestGetEntityExtended:
 
         app = _make_app_full()
         app._catalog_cache = {
-            "targetTemp": ElectroluxDevice(
-                capability_info={"access": "readwrite", "type": "temperature"}
-            )
+            "targetTemp": ElectroluxDevice(capability_info={"access": "readwrite", "type": "temperature"})
         }
         app.data = self._with_cap(
             "targetTemp",
@@ -1133,11 +1075,7 @@ class TestGetEntityExtended:
         from custom_components.electrolux.model import ElectroluxDevice
 
         app = _make_app_full()
-        app._catalog_cache = {
-            "startTime": ElectroluxDevice(
-                capability_info={"access": "read", "type": "int"}
-            )
-        }
+        app._catalog_cache = {"startTime": ElectroluxDevice(capability_info={"access": "read", "type": "int"})}
         app.data = self._with_cap("startTime", {"access": "read", "type": "int"})
         entities = app.get_entity("startTime")
         assert isinstance(entities, list)
@@ -1406,11 +1344,7 @@ class TestSetupAdditionalCoverage:
             data = ElectroluxLibraryEntity(
                 name="Test",
                 status="connected",
-                state={
-                    "properties": {
-                        "reported": {"applianceInfo": {"applianceType": "OV"}}
-                    }
-                },
+                state={"properties": {"reported": {"applianceInfo": {"applianceType": "OV"}}}},
                 appliance_info={},
                 capabilities=caps,
             )

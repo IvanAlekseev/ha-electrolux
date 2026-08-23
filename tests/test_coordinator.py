@@ -514,11 +514,10 @@ async def test_cancel_cleanup_tasks_cancelled_error_is_reraised(mock_coordinator
     with patch(
         "custom_components.electrolux.coordinator.asyncio.gather",
         side_effect=_fake_gather,
-    ):
-        with pytest.raises(asyncio.CancelledError):
-            await mock_coordinator._cleanup_appliance_tasks(
-                [mock_task], "test_appliance_id"
-            )
+    ), pytest.raises(asyncio.CancelledError):
+        await mock_coordinator._cleanup_appliance_tasks(
+            [mock_task], "test_appliance_id"
+        )
 
     # Gather was called twice: once initially, once for the drain
     assert gather_call_count == 2

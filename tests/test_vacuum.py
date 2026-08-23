@@ -50,9 +50,7 @@ def _make_coordinator(battery_min=1, battery_max=6):
     return coordinator
 
 
-def _make_purei9_vacuum(
-    battery_min=1, battery_max=6, battery_status=5, robot_status=10
-) -> ElectroluxVacuum:
+def _make_purei9_vacuum(battery_min=1, battery_max=6, battery_status=5, robot_status=10) -> ElectroluxVacuum:
     coordinator = _make_coordinator(battery_min=battery_min, battery_max=battery_max)
     vacuum = ElectroluxVacuum(
         coordinator=coordinator,
@@ -85,9 +83,7 @@ def _make_purei9_vacuum(
     return vacuum
 
 
-def _make_purei9_gen1_vacuum(
-    battery_status=5, robot_status=10, eco_mode=True
-) -> ElectroluxVacuum:
+def _make_purei9_gen1_vacuum(battery_status=5, robot_status=10, eco_mode=True) -> ElectroluxVacuum:
     """Create a gen 1 Pure i9 vacuum (ecoMode boolean, no powerMode in state)."""
     coordinator = _make_coordinator()
     vacuum = ElectroluxVacuum(
@@ -227,7 +223,7 @@ class TestElectroluxVacuumPurei9:
         vacuum = _make_purei9_vacuum(robot_status=9)
         assert vacuum.activity == VacuumActivity.DOCKED
 
-    def test_activity_returns_none_for_invalid_robot_status(self):
+    def test_activity_returns_none_for_invalid_robot_status(self) -> None:
         """Invalid robotStatus value returns None."""
         vacuum = _make_purei9_vacuum()
         status: dict[str, Any] = cast(dict, vacuum.appliance_status)
@@ -236,7 +232,7 @@ class TestElectroluxVacuumPurei9:
             vacuum.reported_state = status["properties"]["reported"]
             assert vacuum.activity is None
 
-    def test_activity_returns_none_when_robot_status_missing(self):
+    def test_activity_returns_none_when_robot_status_missing(self) -> None:
         """Missing robotStatus returns None."""
         vacuum = _make_purei9_vacuum()
         status: dict[str, Any] = cast(dict, vacuum.appliance_status)
@@ -313,7 +309,7 @@ class TestElectroluxVacuumPurei9:
         assert attr == "CleaningCommand"
         assert command == {"CleaningCommand": "home"}
 
-    def test_battery_level_returns_none_for_invalid_battery_status(self):
+    def test_battery_level_returns_none_for_invalid_battery_status(self) -> None:
         """Invalid batteryStatus value returns None."""
         vacuum = _make_purei9_vacuum()
         status: dict[str, Any] = cast(dict, vacuum.appliance_status)
@@ -322,7 +318,7 @@ class TestElectroluxVacuumPurei9:
             vacuum.reported_state = status["properties"]["reported"]
             assert vacuum.battery_level is None
 
-    def test_battery_level_returns_none_when_battery_missing(self):
+    def test_battery_level_returns_none_when_battery_missing(self) -> None:
         """Missing batteryStatus returns None."""
         vacuum = _make_purei9_vacuum()
         status: dict[str, Any] = cast(dict, vacuum.appliance_status)
@@ -388,7 +384,7 @@ class TestElectroluxVacuumPurei9Gen1:
         vacuum = _make_purei9_gen1_vacuum(eco_mode=False)
         assert vacuum.fan_speed == "Power"
 
-    def test_fan_speed_returns_none_when_eco_mode_missing(self):
+    def test_fan_speed_returns_none_when_eco_mode_missing(self) -> None:
         vacuum = _make_purei9_gen1_vacuum()
         status: dict[str, Any] = cast(dict, vacuum.appliance_status)
         if "properties" in status and "reported" in status["properties"]:
@@ -536,7 +532,7 @@ class TestElectroluxVacuumModern:
         vacuum = _make_modern_vacuum(state="unknown_state")
         assert vacuum.activity is None
 
-    def test_activity_returns_none_when_state_missing(self):
+    def test_activity_returns_none_when_state_missing(self) -> None:
         vacuum = _make_modern_vacuum()
         status: dict[str, Any] = cast(dict, vacuum.appliance_status)
         if "properties" in status and "reported" in status["properties"]:
@@ -667,9 +663,7 @@ class TestElectroluxVacuumAsyncSetupEntry:
 
     @pytest.fixture(autouse=True)
     def mock_platform(self):
-        with patch(
-            "custom_components.electrolux.vacuum.async_get_current_platform"
-        ) as mock:
+        with patch("custom_components.electrolux.vacuum.async_get_current_platform") as mock:
             yield mock
 
     @pytest.mark.asyncio
@@ -693,9 +687,7 @@ class TestElectroluxVacuumAsyncSetupEntry:
         coordinator.data["appliances"] = appliances
         entry.runtime_data = coordinator
 
-        with patch(
-            "custom_components.electrolux.vacuum.ElectroluxVacuum"
-        ) as mock_vacuum_class:
+        with patch("custom_components.electrolux.vacuum.ElectroluxVacuum") as mock_vacuum_class:
             await async_setup_entry(hass, entry, async_add_entities)
 
         mock_vacuum_class.assert_called_once()
@@ -771,9 +763,7 @@ class TestElectroluxVacuumAsyncSetupEntry:
         coordinator.data["appliances"] = appliances
         entry.runtime_data = coordinator
 
-        with patch(
-            "custom_components.electrolux.vacuum.ElectroluxVacuum"
-        ) as mock_vacuum_class:
+        with patch("custom_components.electrolux.vacuum.ElectroluxVacuum") as mock_vacuum_class:
             await async_setup_entry(hass, entry, async_add_entities)
 
         assert mock_vacuum_class.call_count == 2
@@ -790,9 +780,7 @@ class TestElectroluxVacuumEdgeCases:
         vacuum = _make_purei9_vacuum()
 
         # Mock the coordinator data to raise an exception when accessing appliance
-        with patch.object(
-            vacuum.coordinator, "data", side_effect=RuntimeError("Access error")
-        ):
+        with patch.object(vacuum.coordinator, "data", side_effect=RuntimeError("Access error")):
             # Should return the default PUREi9 range despite the exception
             result = vacuum._battery_status_range()
             assert result == (1, 6)
@@ -802,9 +790,7 @@ class TestElectroluxVacuumEdgeCases:
         vacuum = _make_purei9_vacuum()
 
         # Mock coordinator to have appliance without batteryStatus capability
-        vacuum.coordinator.data["appliances"].appliances[
-            "RVC_PNC"
-        ].data.capabilities = {"other": {}}
+        vacuum.coordinator.data["appliances"].appliances["RVC_PNC"].data.capabilities = {"other": {}}
 
         result = vacuum._battery_status_range()
         # Should return default PUREi9 range
@@ -815,9 +801,7 @@ class TestElectroluxVacuumEdgeCases:
         vacuum = _make_purei9_vacuum()
 
         # Mock get_appliance with invalid batteryStatus capability (not a dict)
-        vacuum.coordinator.data["appliances"].appliances[
-            "RVC_PNC"
-        ].data.capabilities = {"batteryStatus": "invalid"}
+        vacuum.coordinator.data["appliances"].appliances["RVC_PNC"].data.capabilities = {"batteryStatus": "invalid"}
 
         result = vacuum._battery_status_range()
         # Should return default PUREi9 range
@@ -851,7 +835,7 @@ class TestElectroluxVacuumEdgeCases:
         ):
             await vacuum._send_command("powerMode", 3)
 
-    def test_battery_level_handles_float_conversion_error(self):
+    def test_battery_level_handles_float_conversion_error(self) -> None:
         """battery_level handles ValueError when converting to float."""
         vacuum = _make_purei9_vacuum()
         status: dict[str, Any] = cast(dict, vacuum.appliance_status)
@@ -875,7 +859,7 @@ class TestElectroluxVacuumEdgeCases:
         # Expected: (8 - 2) / (8 - 2) * 100 = 100
         assert vacuum.battery_level == 100
 
-    def test_activity_handles_non_integer_robot_status(self):
+    def test_activity_handles_non_integer_robot_status(self) -> None:
         """activity handles when robotStatus cannot be converted to int."""
         vacuum = _make_purei9_vacuum()
         status: dict[str, Any] = cast(dict, vacuum.appliance_status)
@@ -886,7 +870,7 @@ class TestElectroluxVacuumEdgeCases:
         # Should handle float and convert to int
         assert vacuum.activity == VacuumActivity.DOCKED
 
-    def test_fan_speed_returns_none_when_attribute_missing(self):
+    def test_fan_speed_returns_none_when_attribute_missing(self) -> None:
         """fan_speed returns None when powerMode/vacuumMode is missing."""
         vacuum = _make_purei9_vacuum()
         status: dict[str, Any] = cast(dict, vacuum.appliance_status)
@@ -904,9 +888,7 @@ class TestElectroluxVacuumZoneCleaning:
     async def test_clean_zones_sends_custom_play_command(self):
         """async_clean_zones sends correct CustomPlay payload."""
         vacuum = _make_purei9_vacuum()
-        vacuum.get_appliance.data.get_capability = MagicMock(
-            return_value={"access": "readwrite"}
-        )
+        vacuum.get_appliance.data.get_capability = MagicMock(return_value={"access": "readwrite"})
 
         with patch(
             "custom_components.electrolux.vacuum.execute_command_with_error_handling",
@@ -957,18 +939,14 @@ class TestElectroluxVacuumZoneCleaning:
         with pytest.raises(HomeAssistantError, match="not supported on this device"):
             await vacuum.async_clean_zones(
                 persistent_map_id="afb13c1b-b557-4a11-84a6-5bfaef90304e",
-                zones=[
-                    {"zone_id": "9082f714-bdba-4f3a-892f-46b2ff2e07de", "power_mode": 1}
-                ],
+                zones=[{"zone_id": "9082f714-bdba-4f3a-892f-46b2ff2e07de", "power_mode": 1}],
             )
 
     @pytest.mark.asyncio
     async def test_clean_zones_reraises_execute_exception(self):
         """async_clean_zones propagates errors from execute_command_with_error_handling."""
         vacuum = _make_purei9_vacuum()
-        vacuum.get_appliance.data.get_capability = MagicMock(
-            return_value={"access": "readwrite"}
-        )
+        vacuum.get_appliance.data.get_capability = MagicMock(return_value={"access": "readwrite"})
 
         with (
             patch(
@@ -1029,9 +1007,7 @@ class TestElectroluxVacuum700series:
         entry.runtime_data = coordinator
 
         with (
-            patch(
-                "custom_components.electrolux.vacuum.ElectroluxVacuum"
-            ) as mock_vacuum_class,
+            patch("custom_components.electrolux.vacuum.ElectroluxVacuum") as mock_vacuum_class,
             patch("custom_components.electrolux.vacuum.async_get_current_platform"),
         ):
             await async_setup_entry(hass, entry, async_add_entities)

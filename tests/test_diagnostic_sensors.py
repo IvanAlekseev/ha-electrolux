@@ -303,38 +303,6 @@ class TestCoordinatorDiagnosticMethods:
             assert coordinator.api_connected is False
             assert coordinator.consecutive_api_failures == 2
 
-    @pytest.mark.asyncio
-    async def test_restart_sse_if_stalled_idle_vs_active(self):
-        """Test _restart_sse_if_stalled uses 3600s for idle appliances and 300s for running."""
-        coordinator = _make_coordinator()
-        coordinator._last_sse_message_time = 500.0
-        coordinator.hass.loop.time.return_value = 1000.0  # 500s elapsed
-
-        mock_task = MagicMock()
-        mock_task.done.return_value = False
-        coordinator.api._sse_task = mock_task
-        coordinator.api.disconnect_websocket = AsyncMock()
-        coordinator.listen_websocket = AsyncMock()
-
-        # Real Appliance structure: applianceState is in reported_state
-        idle_app = MagicMock()
-        idle_app.reported_state = {"applianceState": "OFF"}
-        idle_app.state = {"connectivityState": "connected", "properties": {"reported": {"applianceState": "OFF"}}}
-        idle_app.get_state = MagicMock(return_value="OFF")
-
-        await coordinator._restart_sse_if_stalled({"app1": idle_app})
-        coordinator.api.disconnect_websocket.assert_not_called()
-
-        # Active appliance (RUNNING) in reported_state -> 500s elapsed exceeds 300s active threshold -> restarts
-        active_app = MagicMock()
-        active_app.reported_state = {"applianceState": "RUNNING"}
-        active_app.state = {"connectivityState": "connected"}
-        active_app.get_state = MagicMock(return_value="RUNNING")
-
-        await coordinator._restart_sse_if_stalled({"app1": active_app})
-        coordinator.api.disconnect_websocket.assert_awaited_once()
-        coordinator.listen_websocket.assert_awaited_once()
-
     def test_coordinator_record_api_methods(self):
         """Test record_api_success and record_api_failure on coordinator."""
         coordinator = _make_coordinator()

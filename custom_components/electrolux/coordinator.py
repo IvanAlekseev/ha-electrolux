@@ -71,8 +71,7 @@ WEBSOCKET_RETRY_DELAY = 15.0  # seconds for renewal retry backoff
 API_DISCONNECT_TIMEOUT = 3.0  # seconds for API disconnect
 SSE_RESTART_BASE_COOLDOWN = 15.0  # seconds: base cooldown before first SSE restart attempt
 SSE_RESTART_MAX_COOLDOWN = 1800.0  # 30 minutes: maximum exponential backoff cooldown
-SSE_STALL_THRESHOLD = 300.0  # seconds without SSE messages during active cycle before forced reconnect
-SSE_IDLE_STALL_THRESHOLD = 3600.0  # 1 hour: quiet threshold when all appliances are idle
+SSE_STALL_THRESHOLD = 300.0  # seconds without SSE messages before considering stream stalled
 SSE_STALL_CHECK_INTERVAL = 60.0  # seconds between watchdog checks
 API_PROBE_TIMEOUT = 15.0  # seconds timeout for REST health check probe
 API_PROBE_FAILURE_THRESHOLD = 2  # consecutive failed probes required to mark REST API offline
@@ -1983,52 +1982,28 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
             _LOGGER.debug("SSE stall check skipped: no connected appliances")
             return
 
-        # Relax watchdog threshold to 1 hour if all appliances are in known idle states
-        def _get_appliance_state(app: Any) -> str | None:
-            if hasattr(app, "reported_state") and isinstance(app.reported_state, dict):
-                val = app.reported_state.get("applianceState")
-                if val is not None:
-                    return str(val)
-            if hasattr(app, "get_state") and callable(app.get_state):
-                val = app.get_state("applianceState")
-                if val is not None:
-                    return str(val)
-            if hasattr(app, "state") and isinstance(app.state, dict):
-                val = app.state.get("applianceState")
-                if val is not None:
-                    return str(val)
-            return None
-
-        states = [_get_appliance_state(app) for app in app_dict.values()]
-        valid_states = [s.upper().replace(" ", "_") for s in states if s is not None]
-        all_idle = bool(valid_states) and all(s in IDLE_APPLIANCE_STATES for s in valid_states)
-        effective_threshold = SSE_IDLE_STALL_THRESHOLD if all_idle else SSE_STALL_THRESHOLD
-
         now = self.hass.loop.time()
         age = now - self._last_sse_message_time if self._last_sse_message_time > 0 else float("inf")
 
-        if age <= effective_threshold:
+        if age <= SSE_STALL_THRESHOLD:
             _LOGGER.debug(
-                "SSE stall check: healthy (last message %.1fs ago, threshold %.1fs, idle=%s)",
+                "SSE stall check: healthy (last message %.1fs ago, threshold %.1fs)",
                 age,
-                effective_threshold,
-                all_idle,
+                SSE_STALL_THRESHOLD,
             )
             return
 
         if not self._can_restart_sse():
             _LOGGER.debug(
-                "SSE stall detected (%.1fs since last message, threshold %.1fs) but restart cooldown is active",
+                "SSE stall detected (%.1fs since last message) but restart cooldown is active",
                 age,
-                effective_threshold,
             )
             return
 
         _LOGGER.info(
-            "SSE stall detected (%.1fs since last message, threshold %.1fs, idle=%s)",
+            "SSE stall detected (%.1fs since last message, threshold %.1fs)",
             age,
-            effective_threshold,
-            all_idle,
+            SSE_STALL_THRESHOLD,
         )
         self._consecutive_sse_restarts += 1
         self._last_sse_restart_log_count += 1

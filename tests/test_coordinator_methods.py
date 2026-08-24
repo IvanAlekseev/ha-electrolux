@@ -91,6 +91,7 @@ def coordinator(mock_hass, mock_api):
         coord._pending_state_refresh_tasks = {}
         coord._last_sse_resync_time = 0.0
         coord._pending_sse_resync_task = None
+        coord._sse_retry_task = None
         monitor_task = MagicMock()
         monitor_task.done.return_value = True
         coord._sse_stall_monitor_task = monitor_task
@@ -1588,3 +1589,167 @@ class TestCleanupRemovedAppliancesEdgeCases:
         coordinator.api.get_appliances_list = AsyncMock(return_value=[{"applianceId": "app1"}])
 
         await coordinator.cleanup_removed_appliances()  # Should not raise
+
+
+# ===========================================================================
+# Progressive Backoff on Stream Setup Failures (handle_sse_stream_failure)
+# ===========================================================================
+
+
+class TestStreamSetupProgressiveBackoff:
+    @pytest.mark.asyncio
+    async def test_handle_sse_stream_failure_increments_restarts_and_schedules_backoff(self, coordinator):
+        """handle_sse_stream_failure increments consecutive restarts and schedules exponential retry."""
+        coordinator.hass.is_running = True
+        created_tasks = []
+
+        def _mock_create_task(coro, **kwargs):
+            if asyncio.iscoroutine(coro):
+                coro.close()
+            t = MagicMock()
+            t.done.return_value = False
+            created_tasks.append((t, kwargs.get("name")))
+            return t
+
+        coordinator.hass.async_create_task = MagicMock(side_effect=_mock_create_task)
+
+        # Attempt 1: DNS timeout
+        coordinator.handle_sse_stream_failure(Exception("Timeout while contacting DNS servers"))
+        assert coordinator._consecutive_sse_restarts == 1
+        assert coordinator._sse_backoff_seconds(1) == 30.0
+        assert coordinator._sse_retry_task is not None
+        assert created_tasks[-1][1] == "electrolux-sse-stream-retry"
+
+        # Attempt 2: Connection reset
+        coordinator.handle_sse_stream_failure(Exception("Cannot connect to host"))
+        assert coordinator._consecutive_sse_restarts == 2
+        assert coordinator._sse_backoff_seconds(2) == 60.0
+
+    @pytest.mark.asyncio
+    async def test_handle_sse_stream_failure_cancels_previous_retry(self, coordinator):
+        """handle_sse_stream_failure cancels an existing active retry task before scheduling a new one."""
+        coordinator.hass.is_running = True
+        old_task = MagicMock()
+        old_task.done.return_value = False
+        old_task.cancel = MagicMock()
+        coordinator._sse_retry_task = old_task
+
+        def _mock_create_task(coro, **kwargs):
+            if asyncio.iscoroutine(coro):
+                coro.close()
+            t = MagicMock()
+            t.done.return_value = False
+            return t
+
+        coordinator.hass.async_create_task = MagicMock(side_effect=_mock_create_task)
+
+        coordinator.handle_sse_stream_failure(Exception("Stream failed"))
+        old_task.cancel.assert_called_once()
+        assert coordinator._sse_retry_task is not old_task
+
+    @pytest.mark.asyncio
+    async def test_handle_sse_stream_failure_noop_when_hass_not_running(self, coordinator):
+        """handle_sse_stream_failure does nothing if Home Assistant is not running."""
+        coordinator.hass.is_running = False
+        coordinator.handle_sse_stream_failure(Exception("Some error"))
+        assert coordinator._consecutive_sse_restarts == 0
+        assert coordinator._sse_retry_task is None
+
+    @pytest.mark.asyncio
+    async def test_delayed_sse_retry_executes_listen_websocket(self, coordinator):
+        """_delayed_sse_retry sleeps for the delay and then calls listen_websocket."""
+        coordinator.listen_websocket = AsyncMock()
+        sleep_delays = []
+
+        async def _mock_sleep(delay):
+            sleep_delays.append(delay)
+
+        with patch("asyncio.sleep", side_effect=_mock_sleep):
+            await coordinator._delayed_sse_retry(15.0)
+
+        assert sleep_delays == [15.0]
+        coordinator.listen_websocket.assert_awaited_once()
+        assert coordinator._sse_retry_task is None
+
+    @pytest.mark.asyncio
+    async def test_delayed_sse_retry_task_executes_real_listen_websocket_without_self_cancellation(self, coordinator):
+        """_delayed_sse_retry running as an asyncio task executes real listen_websocket without self-cancelling."""
+        ap = _make_appliance("app1")
+        coordinator.data = {"appliances": _make_appliances({"app1": ap})}
+        coordinator.api.watch_for_appliance_state_updates = AsyncMock()
+
+        # Schedule as actual asyncio task
+        retry_task = asyncio.create_task(coordinator._delayed_sse_retry(0.001))
+        coordinator._sse_retry_task = retry_task
+
+        await retry_task
+
+        assert not retry_task.cancelled()
+        coordinator.api.watch_for_appliance_state_updates.assert_awaited_once()
+        assert coordinator._sse_retry_task is None
+
+    @pytest.mark.asyncio
+    async def test_delayed_sse_retry_handles_cancellation(self, coordinator):
+        """_delayed_sse_retry re-raises CancelledError and clears _sse_retry_task."""
+        with (
+            patch("asyncio.sleep", side_effect=asyncio.CancelledError()),
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await coordinator._delayed_sse_retry(15.0)
+
+        assert coordinator._sse_retry_task is None
+
+    @pytest.mark.asyncio
+    async def test_delayed_sse_retry_catches_listen_exception(self, coordinator):
+        """_delayed_sse_retry catches exceptions from listen_websocket without unhandled exception."""
+        coordinator.listen_websocket = AsyncMock(side_effect=Exception("Failed to start SSE"))
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            await coordinator._delayed_sse_retry(15.0)
+
+        coordinator.listen_websocket.assert_awaited_once()
+        assert coordinator._sse_retry_task is None
+
+    @pytest.mark.asyncio
+    async def test_on_sse_connected_cancels_pending_retry_task(self, coordinator):
+        """_on_sse_connected cancels and clears active retry task on successful connection."""
+        retry_task = MagicMock()
+        retry_task.done.return_value = False
+        retry_task.cancel = MagicMock()
+        coordinator._sse_retry_task = retry_task
+
+        coordinator._consecutive_sse_restarts = 3
+        coordinator._sse_data_received_since_connect = True
+        coordinator._last_sse_resync_time = 0.0
+        coordinator._perform_sse_resync = AsyncMock()
+
+        await coordinator._on_sse_connected()
+
+        retry_task.cancel.assert_called_once()
+        assert coordinator._sse_retry_task is None
+        assert coordinator._consecutive_sse_restarts == 0
+
+    @pytest.mark.asyncio
+    async def test_listen_websocket_cancels_pending_retry_task(self, coordinator):
+        """Direct call to listen_websocket cancels any pending retry task."""
+        retry_task = MagicMock()
+        retry_task.done.return_value = False
+        retry_task.cancel = MagicMock()
+        coordinator._sse_retry_task = retry_task
+        coordinator.data = None  # early return
+
+        await coordinator.listen_websocket()
+
+        retry_task.cancel.assert_called_once()
+        assert coordinator._sse_retry_task is None
+
+    @pytest.mark.asyncio
+    async def test_close_websocket_cancels_pending_retry_task(self, coordinator):
+        """close_websocket cancels and clears any pending retry task."""
+        retry_task = asyncio.create_task(asyncio.sleep(100))
+        coordinator._sse_retry_task = retry_task
+        coordinator.api.close = AsyncMock()
+
+        await coordinator.close_websocket()
+
+        assert retry_task.cancelled()
+        assert coordinator._sse_retry_task is None

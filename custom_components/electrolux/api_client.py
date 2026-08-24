@@ -491,11 +491,16 @@ class ElectroluxApiClient:
                         "Appliance connectivity will be determined by individual data updates.",
                         ", ".join(appliance_ids),
                     )
+                    if not is_auth_error(task.exception()):
+                        if self.coordinator and hasattr(self.coordinator, "handle_sse_stream_failure"):
+                            self.coordinator.handle_sse_stream_failure(task.exception())
                 else:
                     _LOGGER.debug(
                         "SSE event stream ended unexpectedly for appliances %s (no exception)",
                         ", ".join(appliance_ids),
                     )
+                    if self.coordinator and hasattr(self.coordinator, "handle_sse_stream_failure"):
+                        self.coordinator.handle_sse_stream_failure(None)
 
             self._sse_task.add_done_callback(_handle_sse_failure)
 

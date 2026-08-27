@@ -298,9 +298,14 @@ class ElectroluxApiClient:
         try:
             result = await coro
             _LOGGER.debug("_handle_api_call: API call completed successfully")
+            if self.coordinator and hasattr(self.coordinator, "record_api_success"):
+                self.coordinator.record_api_success()
             return result
         except Exception as ex:
             _LOGGER.debug(f"_handle_api_call: Exception caught: {ex}")
+            if self.coordinator and hasattr(self.coordinator, "record_api_failure"):
+                status = getattr(ex, "status", getattr(ex, "status_code", None))
+                self.coordinator.record_api_failure(status_code=status, error=str(ex))
             # Check for authentication-related errors
             if is_auth_error(ex):
                 # Trigger token refresh handler by logging the error
@@ -467,6 +472,16 @@ class ElectroluxApiClient:
 
             # Add callback to handle task failures
             def _handle_sse_failure(task):
+                if self.coordinator:
+                    reason = None
+                    if task.cancelled():
+                        reason = "Stream cancelled"
+                    elif task.exception() is not None:
+                        reason = str(task.exception())
+                    else:
+                        reason = "Stream closed by server"
+                    self.coordinator.record_sse_disconnect(reason=reason, is_cancellation=task.cancelled())
+
                 if task.cancelled():
                     _LOGGER.debug(
                         "SSE event stream was cancelled for appliances %s",

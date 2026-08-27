@@ -710,6 +710,7 @@ class TestExecuteStatesFromCapabilities:
     def test_start_is_not_valid_in_idle_on_this_dryer(self):
         """Regression: DRYER_EXECUTE_STATES allows START in IDLE, this model does not."""
         derived = execute_states_from_capabilities(DRYER_TRIGGERS)
+        assert derived is not None
         assert "IDLE" not in derived["START"]
         assert "IDLE" in DRYER_EXECUTE_STATES["START"]
 

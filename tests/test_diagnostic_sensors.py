@@ -2,6 +2,7 @@
 
 import asyncio
 import time
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
@@ -141,7 +142,7 @@ class TestElectroluxCloudApiBinarySensor:
         assert sensor.is_on is True
         assert sensor.icon == "mdi:cloud-check"
 
-        device_info = sensor.device_info
+        device_info = cast(dict[str, Any], sensor.device_info)
         assert device_info["identifiers"] == {(DOMAIN, "test_entry_123")}
         assert device_info["name"] == "Electrolux Cloud"
         assert device_info["entry_type"] == DeviceEntryType.SERVICE
@@ -188,7 +189,7 @@ class TestElectroluxSseStreamBinarySensor:
         assert sensor.is_on is True
         assert sensor.icon == "mdi:broadcast"
 
-        device_info = sensor.device_info
+        device_info = cast(dict[str, Any], sensor.device_info)
         assert device_info["identifiers"] == {(DOMAIN, "test_entry_123")}
         assert device_info["name"] == "Electrolux Cloud"
         assert device_info["entry_type"] == DeviceEntryType.SERVICE
@@ -254,7 +255,7 @@ class TestCoordinatorDiagnosticMethods:
             assert coordinator.last_api_status_code == 200
             assert coordinator.last_api_error is None
             assert coordinator.last_api_success_time > 0
-            coordinator.async_update_listeners.assert_called_once()
+            cast(MagicMock, coordinator.async_update_listeners).assert_called_once()
 
     @pytest.mark.asyncio
     async def test_check_api_health_500_error(self):
@@ -297,7 +298,9 @@ class TestCoordinatorDiagnosticMethods:
             assert coordinator.api_connected is True
             assert coordinator.consecutive_api_failures == 1
             assert coordinator.last_api_status_code is None
-            assert "DNS resolution failed" in coordinator.last_api_error
+            last_api_error = coordinator.last_api_error
+            assert last_api_error is not None
+            assert "DNS resolution failed" in last_api_error
 
             # 2nd failure: confirms outage
             await coordinator._check_api_health()
@@ -334,14 +337,10 @@ class TestCoordinatorDiagnosticMethods:
         coordinator._sse_connection_state = "streaming"
 
         # Mock async_create_task on coordinator.hass
-        created_task = None
+        def _fake_create_task(coro, name=None, eager_start=True):
+            return asyncio.create_task(coro)
 
-        def _fake_create_task(coro, name=None):
-            nonlocal created_task
-            created_task = asyncio.create_task(coro)
-            return created_task
-
-        coordinator.hass.async_create_task = _fake_create_task
+        coordinator.hass.async_create_task = cast(Any, _fake_create_task)
 
         # Disconnect during planned renewal: state becomes reconnecting, but sse_connected remains True
         coordinator.record_sse_disconnect(reason="Stream cancelled", is_cancellation=True)
@@ -349,6 +348,9 @@ class TestCoordinatorDiagnosticMethods:
         assert coordinator.sse_connected is True
         assert coordinator.consecutive_sse_drops == 1
         assert coordinator.last_sse_disconnect_reason == "Stream cancelled"
+        # Grab a reference to the debounce task so we can assert its lifecycle below;
+        # _on_sse_connected clears the coordinator's reference after cancelling it.
+        debounce_task = coordinator._sse_disconnect_debounce_task
 
         # Reconnecting within grace period cancels debounce task and keeps sse_connected True
         coordinator.data = {"appliances": MagicMock()}
@@ -357,7 +359,8 @@ class TestCoordinatorDiagnosticMethods:
         await asyncio.sleep(0)
         assert coordinator.sse_connected is True
         assert coordinator.sse_connection_state == "streaming"
-        assert created_task.cancelled() or created_task.done()
+        assert debounce_task is not None
+        assert debounce_task.cancelled() or debounce_task.done()
 
     @pytest.mark.asyncio
     async def test_record_sse_disconnect_outage_expires_grace_period(self):
@@ -365,10 +368,10 @@ class TestCoordinatorDiagnosticMethods:
         coordinator = _make_coordinator()
         coordinator._sse_connected = True
 
-        def _fake_create_task(coro, name=None):
+        def _fake_create_task(coro, name=None, eager_start=True):
             return asyncio.create_task(coro)
 
-        coordinator.hass.async_create_task = _fake_create_task
+        coordinator.hass.async_create_task = cast(Any, _fake_create_task)
 
         with patch("custom_components.electrolux.coordinator.SSE_DISCONNECT_GRACE_PERIOD", 0.01):
             coordinator.record_sse_disconnect(reason="Connection refused", is_cancellation=False)
@@ -398,7 +401,7 @@ class TestCoordinatorDiagnosticMethods:
         assert coordinator.sse_connection_state == "streaming"
         assert coordinator.consecutive_sse_drops == 0
         assert coordinator.last_sse_disconnect_reason is None
-        coordinator.async_update_listeners.assert_called()
+        cast(MagicMock, coordinator.async_update_listeners).assert_called()
 
     def test_current_sse_backoff_calculation(self):
         """Test current_sse_backoff_seconds when restarts occur."""

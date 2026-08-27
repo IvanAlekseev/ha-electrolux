@@ -161,6 +161,7 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
         self._capability_retry_task: asyncio.Task | None = None
         self._last_sse_resync_time = 0.0
         self._pending_sse_resync_task: asyncio.Task | None = None
+        self._sse_retry_task: asyncio.Task | None = None
         self._last_remote_control: dict[
             str, str
         ] = {}  # Track remoteControl state per appliance to detect panel interactions
@@ -911,6 +912,11 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
 
     async def _on_sse_connected(self) -> None:
         """Handle actual SSE connection events, including internal SDK reconnects."""
+        pending_retry = getattr(self, "_sse_retry_task", None)
+        if pending_retry and pending_retry is not asyncio.current_task() and not pending_retry.done():
+            pending_retry.cancel()
+        if getattr(self, "_sse_retry_task", None) is not asyncio.current_task():
+            self._sse_retry_task = None
         debounce_task = getattr(self, "_sse_disconnect_debounce_task", None)
         if debounce_task and not debounce_task.done():
             debounce_task.cancel()
@@ -969,6 +975,12 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
 
     async def listen_websocket(self) -> None:
         """Listen for state changes."""
+        pending_retry = getattr(self, "_sse_retry_task", None)
+        if pending_retry and pending_retry is not asyncio.current_task() and not pending_retry.done():
+            pending_retry.cancel()
+        if getattr(self, "_sse_retry_task", None) is not asyncio.current_task():
+            self._sse_retry_task = None
+
         if self.data is None:
             _LOGGER.warning("No coordinator data available, skipping SSE setup")
             return
@@ -1311,6 +1323,11 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
             await asyncio.gather(time_to_end_monitor_task, return_exceptions=True)
         self._time_to_end_monitor_task = None
 
+        sse_retry_task = getattr(self, "_sse_retry_task", None)
+        if sse_retry_task and not sse_retry_task.done():
+            sse_retry_task.cancel()
+            await asyncio.gather(sse_retry_task, return_exceptions=True)
+        self._sse_retry_task = None
         api_health_monitor_task = getattr(self, "_api_health_monitor_task", None)
         if api_health_monitor_task and not api_health_monitor_task.done():
             api_health_monitor_task.cancel()
@@ -2016,6 +2033,52 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
             SSE_RESTART_MAX_COOLDOWN,
         )
 
+    def handle_sse_stream_failure(self, error: Exception | None = None) -> None:
+        """Handle background SSE stream failures (e.g. get_livestream_config failure) by applying progressive backoff."""
+        if not self.hass or not self.hass.is_running:
+            return
+
+        # Cancel any existing scheduled retry task
+        pending = getattr(self, "_sse_retry_task", None)
+        if pending and not pending.done():
+            pending.cancel()
+
+        self._consecutive_sse_restarts += 1
+        backoff = self._sse_backoff_seconds(self._consecutive_sse_restarts)
+        err_msg = str(error) if error else "stream ended unexpectedly"
+
+        _LOGGER.warning(
+            "[STREAM-SETUP] Stream initialization failed (%s). Retrying in %0.1fs (attempt %d)",
+            err_msg,
+            backoff,
+            self._consecutive_sse_restarts,
+        )
+
+        self._sse_retry_task = self.hass.async_create_task(
+            self._delayed_sse_retry(backoff),
+            name=f"{DOMAIN}-sse-stream-retry",
+        )
+
+    async def _delayed_sse_retry(self, delay: float) -> None:
+        """Retry starting the SSE stream after backoff delay."""
+        try:
+            await asyncio.sleep(delay)
+            _LOGGER.debug(
+                "Executing scheduled SSE stream setup retry (attempt %d)",
+                self._consecutive_sse_restarts,
+            )
+            # Clear retry task reference before calling listen_websocket so it doesn't cancel itself
+            self._sse_retry_task = None
+            await self.listen_websocket()
+        except asyncio.CancelledError:
+            _LOGGER.debug("Scheduled SSE stream setup retry cancelled")
+            raise
+        except Exception as ex:
+            _LOGGER.warning("Scheduled SSE stream setup retry failed: %s", ex)
+        finally:
+            if getattr(self, "_sse_retry_task", None) is asyncio.current_task():
+                self._sse_retry_task = None
+
     async def _restart_sse_if_stalled(self, app_dict: dict[str, Any]) -> None:
         """Restart SSE if stream is stale while at least one appliance is connected."""
         sse_task = getattr(self.api, "_sse_task", None)
@@ -2054,12 +2117,13 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
             SSE_STALL_THRESHOLD,
         )
         self._consecutive_sse_restarts += 1
-        self._last_sse_restart_log_count += 1
+        self._last_sse_restart_log_count = getattr(self, "_last_sse_restart_log_count", 0) + 1
 
         # Log summary every 5 restarts or on the first few to avoid spam
         backoff_seconds = self._sse_backoff_seconds(self._consecutive_sse_restarts)
         backoff_desc = f"{int(backoff_seconds)}s" if backoff_seconds < 60 else f"{backoff_seconds / 60:.1f}min"
-        if self._last_sse_restart_log_count <= 3 or self._last_sse_restart_log_count % 5 == 0:
+        log_count = getattr(self, "_last_sse_restart_log_count", 0)
+        if log_count <= 3 or log_count % 5 == 0:
             _LOGGER.info(
                 "SSE watchdog initiating stream restart (restart #%d, backoff %s)",
                 self._consecutive_sse_restarts,

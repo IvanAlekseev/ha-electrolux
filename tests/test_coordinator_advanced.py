@@ -92,6 +92,7 @@ def coordinator(mock_hass, mock_api):
         coord._pending_state_refresh_tasks = {}
         coord._last_sse_resync_time = 0.0
         coord._pending_sse_resync_task = None
+        coord._sse_retry_task = None
         return coord
 
 

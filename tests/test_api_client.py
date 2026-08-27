@@ -1039,18 +1039,22 @@ class TestWatchForApplianceStateUpdates:
         hass.async_create_task = MagicMock(return_value=task)
 
         client = _make_client(hass=hass)
+        client.coordinator = MagicMock()
+        client.coordinator.handle_sse_stream_failure = MagicMock()
         client._client = MagicMock()
         client._client.start_event_stream = MagicMock(return_value=MagicMock())
 
         await client.watch_for_appliance_state_updates(["app1"], MagicMock())
 
-        # Simulate non-auth error (no reauth)
+        # Simulate non-auth error (no reauth, but coordinator stream failure handled)
         task.cancelled = MagicMock(return_value=False)
-        task.exception = MagicMock(return_value=Exception("general network error"))
+        error_ex = Exception("general network error")
+        task.exception = MagicMock(return_value=error_ex)
         captured_cb["cb"](task)
 
         # call_soon_threadsafe should not have been called (no auth error)
         hass.loop.call_soon_threadsafe.assert_not_called()
+        client.coordinator.handle_sse_stream_failure.assert_called_once_with(error_ex)
 
     @pytest.mark.asyncio
     async def test_sse_ended_without_exception(self):
@@ -1069,6 +1073,8 @@ class TestWatchForApplianceStateUpdates:
         hass.async_create_task = MagicMock(return_value=task)
 
         client = _make_client(hass=hass)
+        client.coordinator = MagicMock()
+        client.coordinator.handle_sse_stream_failure = MagicMock()
         client._client = MagicMock()
         client._client.start_event_stream = MagicMock(return_value=MagicMock())
 
@@ -1077,7 +1083,9 @@ class TestWatchForApplianceStateUpdates:
         # Simulate task completed without cancellation or exception
         task.cancelled = MagicMock(return_value=False)
         task.exception = MagicMock(return_value=None)
-        captured_cb["cb"](task)  # Should not raise
+        captured_cb["cb"](task)
+
+        client.coordinator.handle_sse_stream_failure.assert_called_once_with(None)
 
 
 # ---------------------------------------------------------------------------

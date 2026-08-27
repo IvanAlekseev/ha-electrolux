@@ -186,6 +186,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Use proper HA pattern: per-entry task with automatic cleanup via async_on_unload
     async def start_background_tasks(event=None):
         _LOGGER.debug("Background tasks starting after HA startup")
+        # Idempotency guard: if this coordinator already has a live listen/renew task
+        # (e.g. start_background_tasks fired twice, or a renewal/restart is in flight),
+        # do not spawn a second SSE pipeline. Two concurrent listen/renew loops are what
+        # produced duplicated SSE streams, duplicated full-state resyncs, duplicated
+        # watchdog monitors, and duplicated SSE events in the logs.
+        if (coordinator.listen_task and not coordinator.listen_task.done()) or (
+            coordinator.renew_task and not coordinator.renew_task.done()
+        ):
+            _LOGGER.debug(
+                "Electrolux websocket tasks already running for '%s' — skipping duplicate start",
+                entry.title,
+            )
+            return
         try:
             # Start websocket listening
             coordinator.listen_task = hass.async_create_task(
@@ -213,9 +226,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 if coordinator.listen_task:
                     coordinator.listen_task.cancel()
                     _LOGGER.debug("Websocket listen task cancelled")
+                    coordinator.listen_task = None
                 if coordinator.renew_task:
                     coordinator.renew_task.cancel()
                     _LOGGER.debug("Websocket renewal task cancelled")
+                    coordinator.renew_task = None
 
             entry.async_on_unload(cleanup_tasks)
             _LOGGER.debug("Cleanup handlers registered")

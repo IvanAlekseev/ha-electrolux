@@ -209,6 +209,11 @@ class ElectroluxApiClient:
         self._token_handler = None  # Track handler
         self._token_logger = None  # Track logger
         self._sse_task = None  # Track SSE background task
+        # Serialize SSE start/disconnect so concurrent listen_websocket calls cannot
+        # leave two live SSE streams: the first (and only) stream wins; a later caller
+        # waits and then replaces it. Prevents duplicate events / double full-state
+        # resyncs that appear when start_background_tasks fires more than once.
+        self._sse_start_lock: asyncio.Lock = asyncio.Lock()
 
         # Attach token refresh handler to surface token refresh failures as HA issues
         if hass:
@@ -445,85 +450,90 @@ class ElectroluxApiClient:
                 successfully opens a connection.  Used by the coordinator's stale-
                 session health monitor to track liveness.
         """
-        # Ensure any existing stream is killed first
-        if hasattr(self, "_sse_task") and self._sse_task:
-            await self.disconnect_websocket()
+        # Serialize start so a second concurrent caller does not spawn a parallel
+        # stream. The first caller that acquires the lock is the one that "owns" the
+        # current cycle; any later caller waits, then kills the first stream (kill-
+        # before-restart) and starts its own — so exactly one SSE stream is live.
+        async with self._sse_start_lock:
+            # Ensure any existing stream is killed first
+            if hasattr(self, "_sse_task") and self._sse_task:
+                await self.disconnect_websocket()
 
-        try:
-            # Add listeners for each appliance (clear stale registrations first to
-            # prevent double-firing when the SSE stream is restarted/renewed)
-            for appliance_id in appliance_ids:
-                self._client.remove_all_listeners_by_appliance_id(appliance_id)
-                self._client.add_listener(appliance_id, callback)
-                _LOGGER.debug("Added SSE listener for appliance %s", appliance_id)
+            try:
+                # Add listeners for each appliance (clear stale registrations first to
+                # prevent double-firing when the SSE stream is restarted/renewed)
+                for appliance_id in appliance_ids:
+                    self._client.remove_all_listeners_by_appliance_id(appliance_id)
+                    self._client.add_listener(appliance_id, callback)
+                    _LOGGER.debug("Added SSE listener for appliance %s", appliance_id)
 
-            # Build the optional on-connect callback list for the SDK.
-            on_connect_list = [on_connected] if on_connected is not None else None
+                # Build the optional on-connect callback list for the SDK.
+                on_connect_list = [on_connected] if on_connected is not None else None
 
-            # Start the event stream as a background task (it runs indefinitely)
-            if self.hass:
-                self._sse_task = self.hass.async_create_task(
-                    self._client.start_event_stream(do_on_livestream_opening_list=on_connect_list)
-                )
-            else:
-                self._sse_task = asyncio.create_task(
-                    self._client.start_event_stream(do_on_livestream_opening_list=on_connect_list)
-                )
-
-            # Add callback to handle task failures
-            def _handle_sse_failure(task):
-                if self.coordinator:
-                    reason = None
-                    if task.cancelled():
-                        reason = "Stream cancelled"
-                    elif task.exception() is not None:
-                        reason = str(task.exception())
-                    else:
-                        reason = "Stream closed by server"
-                    self.coordinator.record_sse_disconnect(reason=reason, is_cancellation=task.cancelled())
-
-                if task.cancelled():
-                    _LOGGER.debug(
-                        "SSE event stream was cancelled for appliances %s",
-                        ", ".join(appliance_ids),
+                # Start the event stream as a background task (it runs indefinitely)
+                if self.hass:
+                    self._sse_task = self.hass.async_create_task(
+                        self._client.start_event_stream(do_on_livestream_opening_list=on_connect_list)
                     )
-                elif task.exception() is not None:
-                    _LOGGER.error(
-                        "SSE event stream failed for appliances %s: %s",
-                        ", ".join(appliance_ids),
-                        task.exception(),
-                    )
-                    # Check if it's an auth error and trigger reauth
-                    if self.hass and self.config_entry:
-                        if is_auth_error(task.exception()):
-                            _LOGGER.debug(f"SSE auth error detected: {task.exception()}")
-                            asyncio.create_task(self._trigger_reauth(f"SSE auth error: {task.exception()}"))
-                    # Note: We don't mark appliances as offline here because SSE failure
-                    # doesn't necessarily mean appliances are disconnected. Individual
-                    # appliance connectivity is tracked through data updates and timeouts.
-                    _LOGGER.warning(
-                        "SSE stream failed for appliances %s. "
-                        "Appliance connectivity will be determined by individual data updates.",
-                        ", ".join(appliance_ids),
-                    )
-                    if not is_auth_error(task.exception()):
-                        if self.coordinator and hasattr(self.coordinator, "handle_sse_stream_failure"):
-                            self.coordinator.handle_sse_stream_failure(task.exception())
                 else:
-                    _LOGGER.debug(
-                        "SSE event stream ended unexpectedly for appliances %s (no exception)",
-                        ", ".join(appliance_ids),
+                    self._sse_task = asyncio.create_task(
+                        self._client.start_event_stream(do_on_livestream_opening_list=on_connect_list)
                     )
-                    if self.coordinator and hasattr(self.coordinator, "handle_sse_stream_failure"):
-                        self.coordinator.handle_sse_stream_failure(None)
 
-            self._sse_task.add_done_callback(_handle_sse_failure)
+                # Add callback to handle task failures
+                def _handle_sse_failure(task):
+                    if self.coordinator:
+                        reason = None
+                        if task.cancelled():
+                            reason = "Stream cancelled"
+                        elif task.exception() is not None:
+                            reason = str(task.exception())
+                        else:
+                            reason = "Stream closed by server"
+                        self.coordinator.record_sse_disconnect(reason=reason, is_cancellation=task.cancelled())
 
-            _LOGGER.debug("Started SSE event stream for %d appliances", len(appliance_ids))
+                    if task.cancelled():
+                        _LOGGER.debug(
+                            "SSE event stream was cancelled for appliances %s",
+                            ", ".join(appliance_ids),
+                        )
+                    elif task.exception() is not None:
+                        _LOGGER.error(
+                            "SSE event stream failed for appliances %s: %s",
+                            ", ".join(appliance_ids),
+                            task.exception(),
+                        )
+                        # Check if it's an auth error and trigger reauth
+                        if self.hass and self.config_entry:
+                            if is_auth_error(task.exception()):
+                                _LOGGER.debug(f"SSE auth error detected: {task.exception()}")
+                                asyncio.create_task(self._trigger_reauth(f"SSE auth error: {task.exception()}"))
+                        # Note: We don't mark appliances as offline here because SSE failure
+                        # doesn't necessarily mean appliances are disconnected. Individual
+                        # appliance connectivity is tracked through data updates and timeouts.
+                        _LOGGER.warning(
+                            "SSE stream failed for appliances %s. "
+                            "Appliance connectivity will be determined by individual data updates.",
+                            ", ".join(appliance_ids),
+                        )
+                        if not is_auth_error(task.exception()):
+                            if self.coordinator and hasattr(self.coordinator, "handle_sse_stream_failure"):
+                                self.coordinator.handle_sse_stream_failure(task.exception())
+                    else:
+                        _LOGGER.debug(
+                            "SSE event stream ended unexpectedly for appliances %s (no exception)",
+                            ", ".join(appliance_ids),
+                        )
+                        if self.coordinator and hasattr(self.coordinator, "handle_sse_stream_failure"):
+                            self.coordinator.handle_sse_stream_failure(None)
 
-        except Exception as e:
-            _LOGGER.error("Failed to start SSE event stream: %s", e)
-            raise
+                self._sse_task.add_done_callback(_handle_sse_failure)
+
+                _LOGGER.debug("Started SSE event stream for %d appliances", len(appliance_ids))
+
+            except Exception as e:
+                _LOGGER.error("Failed to start SSE event stream: %s", e)
+                raise
 
     async def disconnect_websocket(self):
         """Disconnect SSE event stream."""

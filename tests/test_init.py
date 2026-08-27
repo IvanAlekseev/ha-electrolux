@@ -594,10 +594,66 @@ class TestAsyncSetupEntryAdditional:
                 break
 
         assert cleanup_fn is not None, "cleanup_tasks not found in async_on_unload calls"
+
+        # The tasks are created inside start_background_tasks via hass.async_create_task,
+        # so capture the references assigned to the coordinator before cleanup nulls them.
+        listen_task = mock_coordinator.listen_task
+        renew_task = mock_coordinator.renew_task
+
         cleanup_fn()
 
-        mock_coordinator.listen_task.cancel.assert_called()
-        mock_coordinator.renew_task.cancel.assert_called()
+        listen_task.cancel.assert_called()
+        renew_task.cancel.assert_called()
+        # cleanup_tasks should also null the references so a later duplicate start cannot
+        # re-enter the idempotency guard against a stale handle.
+        assert mock_coordinator.listen_task is None
+        assert mock_coordinator.renew_task is None
+
+    @pytest.mark.asyncio
+    async def test_setup_entry_background_tasks_skips_when_already_running(self):
+        """start_background_tasks is idempotent: a second invocation while the
+        listen task is live must NOT spawn a duplicate SSE pipeline.
+
+        Regression for the observed double `listen_websocket` / double SSE stream in
+        debug logs (two `Connected to SSE stream`, two full-state resyncs, duplicated
+        SSE events and watchdog monitors).
+        """
+        from unittest.mock import AsyncMock, patch
+
+        from custom_components.electrolux import async_setup_entry
+
+        mock_hass = MagicMock()
+        mock_hass.data = {}
+        mock_hass.is_running = True
+        mock_hass.config_entries.async_forward_entry_setups = AsyncMock()
+
+        mock_entry = _make_mock_entry()
+        mock_coordinator = _make_mock_coordinator()
+
+        # Simulate an already-running SSE listen task (as if start_background_tasks
+        # had already fired once). done() == False ⇒ guard must skip the duplicate.
+        running_listen = MagicMock()
+        running_listen.done.return_value = False
+        mock_coordinator.listen_task = running_listen
+
+        with (
+            patch(
+                "custom_components.electrolux.get_electrolux_session",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "custom_components.electrolux.ElectroluxCoordinator",
+                return_value=mock_coordinator,
+            ),
+        ):
+            result = await async_setup_entry(mock_hass, mock_entry)
+
+        assert result is True
+        # background tasks must NOT be started again
+        mock_coordinator.listen_websocket.assert_not_called()
+        mock_coordinator.renew_websocket.assert_not_called()
+        # ...and the existing task handle must be left untouched
+        assert mock_coordinator.listen_task is running_listen
 
     @pytest.mark.asyncio
     async def test_setup_entry_close_coordinator_on_stop_event(self):

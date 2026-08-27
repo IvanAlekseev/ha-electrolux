@@ -7,6 +7,7 @@ import time
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
+import aiohttp
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
@@ -14,6 +15,7 @@ from homeassistant.exceptions import (
     HomeAssistantError,
 )
 from homeassistant.helpers import issue_registry
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import ElectroluxLibraryEntity
@@ -69,8 +71,11 @@ WEBSOCKET_RETRY_DELAY = 15.0  # seconds for renewal retry backoff
 API_DISCONNECT_TIMEOUT = 3.0  # seconds for API disconnect
 SSE_RESTART_BASE_COOLDOWN = 15.0  # seconds: base cooldown before first SSE restart attempt
 SSE_RESTART_MAX_COOLDOWN = 1800.0  # 30 minutes: maximum exponential backoff cooldown
-SSE_STALL_THRESHOLD = 300.0  # seconds without SSE messages before forced reconnect
+SSE_STALL_THRESHOLD = 300.0  # seconds without SSE messages before considering stream stalled
 SSE_STALL_CHECK_INTERVAL = 60.0  # seconds between watchdog checks
+SSE_DISCONNECT_GRACE_PERIOD = 30.0  # seconds grace period before marking SSE stream offline
+API_PROBE_TIMEOUT = 15.0  # seconds timeout for REST health check probe
+API_PROBE_FAILURE_THRESHOLD = 2  # consecutive failed probes required to mark REST API offline
 
 # String constants for data keys
 APPLIANCE_ID_KEY = "applianceId"
@@ -101,6 +106,7 @@ TIME_ENTITY_THRESHOLD_HIGH = 60  # seconds (1 minute — covers minute-granulari
 # This tracks timeToEnd freshness per appliance instead of per connection, and
 # forces a REST poll when it goes stale while the countdown is actually meaningful.
 ACTIVE_TIME_TO_END_STATES = {"RUNNING", "PAUSED", "DELAYED_START"}
+IDLE_APPLIANCE_STATES = {"OFF", "IDLE", "READY_TO_START", "END_OF_CYCLE"}
 TIME_TO_END_STALE_THRESHOLD = 240.0  # seconds without a timeToEnd refresh before polling
 TIME_TO_END_STALL_CHECK_INTERVAL = 60.0  # seconds between staleness checks
 
@@ -163,6 +169,21 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
             str, asyncio.Task
         ] = {}  # Deduplicate _refresh_after_appliance_state_change tasks per appliance
 
+        # Real-time API & SSE stream diagnostic tracking
+        self._api_connected: bool = True
+        self._consecutive_api_failures: int = 0
+        self._last_api_success_time: float = time.time()
+        self._last_api_status_code: int | None = 200
+        self._last_api_error: str | None = None
+        self._api_health_monitor_task: asyncio.Task | None = None
+
+        self._sse_connected: bool = False
+        self._sse_connection_state: str = "disconnected"
+        self._last_sse_event_time: float = 0.0
+        self._last_sse_disconnect_reason: str | None = None
+        self._consecutive_sse_drops: int = 0
+        self._sse_disconnect_debounce_task: asyncio.Task | None = None
+
         super().__init__(
             hass,
             _LOGGER,
@@ -171,6 +192,127 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
                 hours=SSE_RENEW_INTERVAL_HOURS
             ),  # Health check every 6 hours instead of 30 seconds
         )
+
+    @property
+    def api_connected(self) -> bool:
+        """Return whether the REST API gateway is reachable and operational."""
+        return self._api_connected
+
+    @property
+    def last_api_success_time(self) -> float:
+        """Return timestamp of last successful API interaction."""
+        return self._last_api_success_time
+
+    @property
+    def last_api_status_code(self) -> int | None:
+        """Return HTTP status code of last API interaction."""
+        return self._last_api_status_code
+
+    @property
+    def last_api_error(self) -> str | None:
+        """Return last API error message if any."""
+        return self._last_api_error
+
+    @property
+    def consecutive_api_failures(self) -> int:
+        """Return count of consecutive failed API checks."""
+        return self._consecutive_api_failures
+
+    @property
+    def sse_connected(self) -> bool:
+        """Return whether the live SSE event stream is actively connected."""
+        return self._sse_connected
+
+    @property
+    def sse_connection_state(self) -> str:
+        """Return current SSE stream connection state."""
+        return self._sse_connection_state
+
+    @property
+    def last_sse_event_time(self) -> float:
+        """Return timestamp of last received SSE event frame."""
+        return self._last_sse_event_time
+
+    @property
+    def last_sse_disconnect_reason(self) -> str | None:
+        """Return reason for last SSE stream disconnection."""
+        return self._last_sse_disconnect_reason
+
+    @property
+    def consecutive_sse_drops(self) -> int:
+        """Return total count of SSE stream disconnections."""
+        return self._consecutive_sse_drops
+
+    @property
+    def current_sse_backoff_seconds(self) -> float:
+        """Return current SSE reconnect backoff duration in seconds."""
+        if self._consecutive_sse_restarts == 0:
+            return 0.0
+        return self._sse_backoff_seconds(self._consecutive_sse_restarts)
+
+    def record_api_success(self) -> None:
+        """Record successful REST API interaction and reset failure counters."""
+        self._consecutive_api_failures = 0
+        self._api_connected = True
+        self._last_api_status_code = 200
+        self._last_api_success_time = time.time()
+        self._last_api_error = None
+        if hasattr(self, "_listeners"):
+            self.async_update_listeners()
+
+    def record_api_failure(
+        self,
+        status_code: int | None = None,
+        error: str | None = None,
+        immediate_disconnect: bool = False,
+    ) -> None:
+        """Record failed REST API interaction with failure debouncing."""
+        self._consecutive_api_failures += 1
+        self._last_api_status_code = status_code
+        self._last_api_error = error
+        if (
+            immediate_disconnect
+            or self._consecutive_api_failures >= API_PROBE_FAILURE_THRESHOLD
+            or (isinstance(status_code, int) and status_code >= 429)
+        ):
+            self._api_connected = False
+        if hasattr(self, "_listeners"):
+            self.async_update_listeners()
+
+    def record_sse_disconnect(
+        self,
+        reason: str | None = None,
+        is_cancellation: bool = False,
+    ) -> None:
+        """Record SSE stream disconnection with reconnection grace period."""
+        self._consecutive_sse_drops += 1
+        self._last_sse_disconnect_reason = reason or ("Stream cancelled" if is_cancellation else "Stream disconnected")
+        self._sse_connection_state = "reconnecting" if is_cancellation else "disconnected"
+
+        debounce_task = getattr(self, "_sse_disconnect_debounce_task", None)
+        if debounce_task and not debounce_task.done():
+            debounce_task.cancel()
+
+        async def _debounce_disconnect() -> None:
+            try:
+                await asyncio.sleep(SSE_DISCONNECT_GRACE_PERIOD)
+                self._sse_connected = False
+                self._sse_connection_state = "disconnected"
+                if hasattr(self, "_listeners"):
+                    self.async_update_listeners()
+            except asyncio.CancelledError:
+                pass
+
+        if self.hass:
+            self._sse_disconnect_debounce_task = self.hass.async_create_task(
+                _debounce_disconnect(),
+                name=f"{DOMAIN}-sse-disconnect-debounce",
+            )
+        else:
+            self._sse_connected = False
+
+        if hasattr(self, "_listeners"):
+            self.async_update_listeners()
 
     async def async_login(self) -> bool:
         """Authenticate with the service."""
@@ -393,6 +535,10 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
         now = self.hass.loop.time()
         self._last_sse_message_time = now
         self._sse_data_received_since_connect = True
+        self._sse_connected = True
+        self._sse_connection_state = "streaming"
+        self._last_sse_event_time = time.time()
+        self._consecutive_sse_drops = 0
 
         appliance_id_dbg = data.get(APPLIANCE_ID_KEY) or data.get(APPLIANCE_ID_ALT_KEY)
         property_dbg = data.get(PROPERTY_KEY)
@@ -771,6 +917,17 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
             pending_retry.cancel()
         if getattr(self, "_sse_retry_task", None) is not asyncio.current_task():
             self._sse_retry_task = None
+        debounce_task = getattr(self, "_sse_disconnect_debounce_task", None)
+        if debounce_task and not debounce_task.done():
+            debounce_task.cancel()
+        self._sse_disconnect_debounce_task = None
+
+        self._sse_connected = True
+        self._sse_connection_state = "streaming"
+        self._last_sse_disconnect_reason = None
+        self._consecutive_sse_drops = 0
+        if hasattr(self, "_listeners"):
+            self.async_update_listeners()
 
         now = self.hass.loop.time()
         # Seed watchdog timestamp at connection-open time so a fresh stream gets
@@ -847,11 +1004,49 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
             )
             self._ensure_sse_stall_monitor_started()
             self._ensure_time_to_end_monitor_started()
+            self._ensure_api_health_monitor_started()
             _LOGGER.debug(f"Successfully started SSE listening for {len(ids)} appliances")
 
         except Exception as ex:
             _LOGGER.error(f"Failed to start SSE listening: {ex}")
             raise
+
+    def _ensure_api_health_monitor_started(self) -> None:
+        """Ensure the REST API health monitor task is running."""
+        task = getattr(self, "_api_health_monitor_task", None)
+        if task is not None and not task.done():
+            return
+
+        self._api_health_monitor_task = self.hass.async_create_task(
+            self._monitor_api_health_loop(),
+            name=f"{DOMAIN}-api-health-monitor",
+        )
+        _LOGGER.debug("Electrolux API health monitor task started")
+
+    async def _monitor_api_health_loop(self) -> None:
+        """Periodically check Electrolux REST API gateway health via public ping endpoint."""
+        try:
+            while True:
+                await self._check_api_health()
+                await asyncio.sleep(60)
+        except asyncio.CancelledError:
+            _LOGGER.debug("Electrolux API health monitor loop cancelled")
+            raise
+        except Exception as ex:
+            _LOGGER.debug("Electrolux API health monitor loop exception: %s", ex)
+
+    async def _check_api_health(self) -> None:
+        """Probe the Electrolux API /ping endpoint to verify gateway connectivity."""
+        url = "https://api.developer.electrolux.one/ping"
+        try:
+            session = async_get_clientsession(self.hass)
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=API_PROBE_TIMEOUT)) as resp:
+                if resp.status == 200:
+                    self.record_api_success()
+                else:
+                    self.record_api_failure(status_code=resp.status, error=f"HTTP {resp.status}")
+        except Exception as ex:
+            self.record_api_failure(status_code=None, error=str(ex))
 
     def _ensure_sse_stall_monitor_started(self) -> None:
         """Ensure the SSE stall watchdog task is running."""
@@ -1133,6 +1328,20 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
             sse_retry_task.cancel()
             await asyncio.gather(sse_retry_task, return_exceptions=True)
         self._sse_retry_task = None
+        api_health_monitor_task = getattr(self, "_api_health_monitor_task", None)
+        if api_health_monitor_task and not api_health_monitor_task.done():
+            api_health_monitor_task.cancel()
+            await asyncio.gather(api_health_monitor_task, return_exceptions=True)
+        self._api_health_monitor_task = None
+
+        debounce_task = getattr(self, "_sse_disconnect_debounce_task", None)
+        if debounce_task and not debounce_task.done():
+            debounce_task.cancel()
+            await asyncio.gather(debounce_task, return_exceptions=True)
+        self._sse_disconnect_debounce_task = None
+
+        self._sse_connected = False
+        self._sse_connection_state = "disconnected"
 
         # Close API connection - util.py handles SSE stream cleanup
         try:

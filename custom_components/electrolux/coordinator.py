@@ -605,6 +605,28 @@ class ElectroluxCoordinator(DataUpdateCoordinator):
                 )
                 self._schedule_deferred_update(appliance_id)
 
+            # Desync recovery: if timeToEnd is decrementing while applianceState is NOT
+            # in an active running/drying state, the appliance has started running but the
+            # applianceState SSE event was dropped by the cloud. Force a state refresh.
+            appliance = appliances.get_appliance(appliance_id) if appliances else None
+            current_state = (
+                str(appliance.reported_state.get("applianceState") if appliance else "").upper().replace(" ", "_")
+            )
+            if (
+                current_state not in ACTIVE_TIME_TO_END_STATES
+                and old_value is not None
+                and new_value is not None
+                and 0 < new_value < old_value
+            ):
+                _LOGGER.info(
+                    "timeToEnd decremented (%s → %s) while applianceState=%s for %s — desync detected, scheduling state refresh",
+                    old_value,
+                    new_value,
+                    current_state,
+                    appliance_id,
+                )
+                self._schedule_state_refresh(appliance_id)
+
             # Track this value for next comparison
             self._last_time_to_end[appliance_id] = new_value
 

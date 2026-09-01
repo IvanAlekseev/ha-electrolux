@@ -9,6 +9,7 @@
 - __fix(auth): enforce strict backoff cooldown on token refresh failures and classify transient errors (#176)__ by @IvanAlekseev Repeated token-refresh failures no longer hammer the login endpoint; transient network errors are classified correctly so they don't count as auth failures.
 - __fix: cancel timeToEnd and SSE watchdog tasks on config entry unload (#181)__ by @TTLucian Watchdog timers are properly cleaned up when the integration is reloaded, preventing orphaned background tasks.
 - __fix(coordinator): replace timer-based stream watchdog with REST state desync validation (#186) by @IvanAlekseev
+- __fix(models): map catalog-only string+readwrite capabilities to SELECT entities (#195) by TTLucian
 
 ## ✨ Features
 

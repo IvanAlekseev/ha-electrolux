@@ -66,7 +66,7 @@ def mock_config_entry():
     return entry
 
 
-def _make_coordinator():
+def _make_coordinator() -> Any:
     """Instantiate a real ElectroluxCoordinator object with mocked internals."""
     mock_loop = MagicMock()
     mock_loop.time.return_value = 1_000_000.0

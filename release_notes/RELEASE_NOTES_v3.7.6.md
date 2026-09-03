@@ -21,8 +21,8 @@
 ## 🔧 Internal / chores
 
 - Fix duplicate SSE/websocket pipeline creation (@TTLucian)
-- Python dependency bumps (#177, #185 by @dependabot)
 - Test suite hardening: execute-state derivation now regression-tested against real appliance samples (#188/#190 by @TTLucian)
+- Python dependency bumps
 
 ## ⬆️ Upgrade notes
 

@@ -7,10 +7,7 @@
                 "data": {
                     "api_key": "API Anahtarı",
                     "access_token": "Erişim Jetonu",
-                    "refresh_token": "Jetonu Yenile",
-                    "notifications": "Kritik uyarılar için bildirimleri etkinleştirin",
-                    "notifications_warning": "Uyarılar için bildirimleri etkinleştir",
-                    "notifications_diagnostic": "Teşhis mesajları için bildirimleri etkinleştir"
+                    "refresh_token": "Jetonu Yenile"
                 }
             },
             "reauth_validate": {
@@ -51,10 +48,7 @@
                 "data": {
                     "api_key": "API Anahtarı",
                     "access_token": "Erişim Jetonu",
-                    "refresh_token": "Jetonu Yenile",
-                    "notifications": "Kritik uyarılar için bildirimleri etkinleştirin",
-                    "notifications_warning": "Uyarılar için bildirimleri etkinleştir",
-                    "notifications_diagnostic": "Teşhis mesajları için bildirimleri etkinleştir"
+                    "refresh_token": "Jetonu Yenile"
                 }
             }
         },

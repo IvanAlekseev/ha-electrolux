@@ -7,10 +7,7 @@
                 "data": {
                     "api_key": "API-ключ",
                     "access_token": "Токен доступа",
-                    "refresh_token": "Обновить токен",
-                    "notifications": "Включить уведомления о критических оповещениях",
-                    "notifications_warning": "Включить уведомления о предупреждениях",
-                    "notifications_diagnostic": "Включить уведомления о диагностических сообщениях"
+                    "refresh_token": "Обновить токен"
                 }
             },
             "reauth_validate": {
@@ -51,10 +48,7 @@
                 "data": {
                     "api_key": "API-ключ",
                     "access_token": "Токен доступа",
-                    "refresh_token": "Обновить токен",
-                    "notifications": "Включить уведомления о критических оповещениях",
-                    "notifications_warning": "Включить уведомления о предупреждениях",
-                    "notifications_diagnostic": "Включить уведомления о диагностических сообщениях"
+                    "refresh_token": "Обновить токен"
                 }
             }
         },

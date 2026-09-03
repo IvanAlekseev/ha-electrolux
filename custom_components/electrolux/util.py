@@ -1,23 +1,16 @@
 """Utilities for the Electrolux platform."""
 
-import base64
 import json
 import logging
 import re
 from typing import Any
 
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 
 from .api_client import ElectroluxApiClient, get_electrolux_session  # noqa: F401
 from .auth_errors import is_auth_error
 from .const import (
-    CONF_NOTIFICATION_DEFAULT,
-    CONF_NOTIFICATION_DIAG,
-    CONF_NOTIFICATION_WARNING,
     DOMAIN,
-    NAME,
     SECONDS_PER_MINUTE,
     TIME_INVALID_SENTINEL,
 )
@@ -43,59 +36,6 @@ _STATUS_CODE_MAPPING = {
     429: "Too many commands sent. Please wait a moment and try again.",
     503: "Appliance is disconnected or not available. Check the appliance's network connection.",
 }
-
-
-def should_send_notification(config_entry, alert_severity, alert_status) -> bool:
-    """Determine if the notification should be sent based on severity and config."""
-    if alert_status == "NOT_NEEDED":
-        return False
-    if alert_severity == "DIAGNOSTIC":
-        return config_entry.data.get(CONF_NOTIFICATION_DIAG, False)
-    elif alert_severity == "WARNING":
-        return config_entry.data.get(CONF_NOTIFICATION_WARNING, False)
-    else:
-        return config_entry.data.get(CONF_NOTIFICATION_DEFAULT, True)
-
-
-def create_notification(
-    hass: HomeAssistant,
-    config_entry: ConfigEntry,
-    alert_name: str,
-    alert_severity: str,
-    alert_status: str,
-    title: str = NAME,
-):
-    """Create a notification."""
-
-    message = f"Alert: {alert_name}</br>Severity: {alert_severity}</br>Status: {alert_status}"
-
-    if should_send_notification(config_entry, alert_severity, alert_status) is False:
-        _LOGGER.debug(
-            "Discarding notification.\nTitle: %s\nMessage: %s",
-            title,
-            message,
-        )
-        return
-
-    # Convert the string to base64 - this prevents the same alert being spammed
-    input_string = f"{title}-{message}"
-    bytes_string = input_string.encode("utf-8")
-    base64_bytes = base64.b64encode(bytes_string)
-    base64_string = base64_bytes.decode("utf-8")
-
-    # send notification with crafted notification id so we dont spam notifications
-    _LOGGER.debug(
-        "Sending notification.\nTitle: %s\nMessage: %s",
-        title,
-        message,
-    )
-    hass.async_create_task(
-        hass.services.async_call(
-            "persistent_notification",
-            "create",
-            {"message": message, "title": title, "notification_id": base64_string},
-        )
-    )
 
 
 def time_seconds_to_minutes(seconds: float | None) -> int | None:

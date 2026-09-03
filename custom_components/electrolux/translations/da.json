@@ -7,10 +7,7 @@
                 "data": {
                     "api_key": "API nøgle",
                     "access_token": "Adgangstoken",
-                    "refresh_token": "Opdater token",
-                    "notifications": "Aktiver meddelelser for kritiske advarsler",
-                    "notifications_warning": "Aktiver meddelelser for advarsler",
-                    "notifications_diagnostic": "Aktiver meddelelser for diagnostiske meddelelser"
+                    "refresh_token": "Opdater token"
                 }
             },
             "reauth_validate": {
@@ -51,10 +48,7 @@
                 "data": {
                     "api_key": "API nøgle",
                     "access_token": "Adgangstoken",
-                    "refresh_token": "Opdater token",
-                    "notifications": "Aktiver meddelelser for kritiske advarsler",
-                    "notifications_warning": "Aktiver meddelelser for advarsler",
-                    "notifications_diagnostic": "Aktiver meddelelser for diagnostiske meddelelser"
+                    "refresh_token": "Opdater token"
                 }
             }
         },

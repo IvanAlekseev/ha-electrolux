@@ -7,10 +7,7 @@
         "data": {
           "api_key": "API Key",
           "access_token": "Access Token",
-          "refresh_token": "Refresh Token",
-          "notifications": "Enable notifications for critical alerts",
-          "notifications_warning": "Enable notifications for warnings",
-          "notifications_diagnostic": "Enable notifications for diagnostic messages"
+          "refresh_token": "Refresh Token"
         }
       },
       "reauth_validate": {
@@ -51,10 +48,7 @@
         "data": {
           "api_key": "API Key",
           "access_token": "Access Token",
-          "refresh_token": "Refresh Token",
-          "notifications": "Enable notifications for critical alerts",
-          "notifications_warning": "Enable notifications for warnings",
-          "notifications_diagnostic": "Enable notifications for diagnostic messages"
+          "refresh_token": "Refresh Token"
         }
       }
     },

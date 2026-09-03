@@ -7,10 +7,7 @@
                 "data": {
                     "api_key": "Cheia API",
                     "access_token": "Token de acces",
-                    "refresh_token": "Token de reîmprospătare",
-                    "notifications": "Activați notificările pentru alertele critice",
-                    "notifications_warning": "Activați notificările pentru avertismente",
-                    "notifications_diagnostic": "Activați notificările pentru mesajele de diagnosticare"
+                    "refresh_token": "Token de reîmprospătare"
                 }
             },
             "reauth_validate": {
@@ -51,10 +48,7 @@
                 "data": {
                     "api_key": "Cheia API",
                     "access_token": "Token de acces",
-                    "refresh_token": "Token de reîmprospătare",
-                    "notifications": "Activați notificările pentru alertele critice",
-                    "notifications_warning": "Activați notificările pentru avertismente",
-                    "notifications_diagnostic": "Activați notificările pentru mesajele de diagnosticare"
+                    "refresh_token": "Token de reîmprospătare"
                 }
             }
         },

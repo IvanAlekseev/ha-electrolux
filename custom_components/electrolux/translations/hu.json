@@ -7,10 +7,7 @@
                 "data": {
                     "api_key": "API kulcs",
                     "access_token": "Hozzáférési token",
-                    "refresh_token": "Token frissítése",
-                    "notifications": "Engedélyezze a kritikus riasztások értesítéseit",
-                    "notifications_warning": "Figyelmeztetésekről szóló értesítések engedélyezése",
-                    "notifications_diagnostic": "Engedélyezze a diagnosztikai üzenetekre vonatkozó értesítéseket"
+                    "refresh_token": "Token frissítése"
                 }
             },
             "reauth_validate": {
@@ -51,10 +48,7 @@
                 "data": {
                     "api_key": "API kulcs",
                     "access_token": "Hozzáférési token",
-                    "refresh_token": "Token frissítése",
-                    "notifications": "Engedélyezze a kritikus riasztások értesítéseit",
-                    "notifications_warning": "Figyelmeztetésekről szóló értesítések engedélyezése",
-                    "notifications_diagnostic": "Engedélyezze a diagnosztikai üzenetekre vonatkozó értesítéseket"
+                    "refresh_token": "Token frissítése"
                 }
             }
         },

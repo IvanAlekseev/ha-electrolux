@@ -7,10 +7,7 @@
                 "data": {
                     "api_key": "API võti",
                     "access_token": "Juurdepääsuluba",
-                    "refresh_token": "Värskenda märki",
-                    "notifications": "Lubage kriitiliste hoiatusteadete märguanded",
-                    "notifications_warning": "Hoiatuste märguannete lubamine",
-                    "notifications_diagnostic": "Lubage diagnostikasõnumite märguanded"
+                    "refresh_token": "Värskenda märki"
                 }
             },
             "reauth_validate": {
@@ -51,10 +48,7 @@
                 "data": {
                     "api_key": "API võti",
                     "access_token": "Juurdepääsuluba",
-                    "refresh_token": "Värskenda märki",
-                    "notifications": "Lubage kriitiliste hoiatusteadete märguanded",
-                    "notifications_warning": "Hoiatuste märguannete lubamine",
-                    "notifications_diagnostic": "Lubage diagnostikasõnumite märguanded"
+                    "refresh_token": "Värskenda märki"
                 }
             }
         },

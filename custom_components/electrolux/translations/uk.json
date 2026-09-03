@@ -7,10 +7,7 @@
                 "data": {
                     "api_key": "Ключ API",
                     "access_token": "Маркер доступу",
-                    "refresh_token": "Оновити маркер",
-                    "notifications": "Увімкнути сповіщення для критичних сповіщень",
-                    "notifications_warning": "Увімкнути сповіщення для попереджень",
-                    "notifications_diagnostic": "Увімкнути сповіщення для діагностичних повідомлень"
+                    "refresh_token": "Оновити маркер"
                 }
             },
             "reauth_validate": {
@@ -51,10 +48,7 @@
                 "data": {
                     "api_key": "Ключ API",
                     "access_token": "Маркер доступу",
-                    "refresh_token": "Оновити маркер",
-                    "notifications": "Увімкнути сповіщення для критичних сповіщень",
-                    "notifications_warning": "Увімкнути сповіщення для попереджень",
-                    "notifications_diagnostic": "Увімкнути сповіщення для діагностичних повідомлень"
+                    "refresh_token": "Оновити маркер"
                 }
             }
         },

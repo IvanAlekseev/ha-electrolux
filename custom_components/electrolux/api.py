@@ -32,9 +32,6 @@ class UserInput(TypedDict, total=False):
     api_key: str
     access_token: str
     refresh_token: str
-    notification_default: bool
-    notification_diag: bool
-    notification_warning: bool
 
 
 def deep_merge_dicts(dict1: dict[str, Any], dict2: dict[str, Any]) -> dict[str, Any]:

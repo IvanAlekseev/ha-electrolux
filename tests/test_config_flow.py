@@ -773,9 +773,6 @@ class TestOptionsFlowHandler:
             "api_key": "existing_api_key_1234",
             "access_token": "existing_access_1234567890",
             "refresh_token": "existing_refresh_1234567890",
-            "notification_default": True,
-            "notification_warning": False,
-            "notification_diag": False,
         }
         mock_entry.options = options or {}
         return ElectroluxStatusOptionsFlowHandler(mock_entry)
@@ -811,9 +808,6 @@ class TestOptionsFlowHandler:
             "api_key": "new_api_key_1234567890",
             "access_token": "new_access_token_1234567890",
             "refresh_token": "new_refresh_token_1234567890",
-            "notification_default": True,
-            "notification_warning": False,
-            "notification_diag": False,
         }
 
         with (
@@ -1064,22 +1058,6 @@ class TestConfigFlowMissingCoverage:
         mock_entry.options = {}
         handler = ElectroluxStatusFlowHandler.async_get_options_flow(mock_entry)
         assert isinstance(handler, ElectroluxStatusOptionsFlowHandler)
-
-    # ------------------------------------------------------------------ #
-    # Line 359: _get_config_schema with show_advanced_options=True
-    # ------------------------------------------------------------------ #
-
-    def test_get_config_schema_with_advanced_options_includes_notifications(self):
-        """When show_advanced_options=True, notification fields are added (line 359)."""
-        flow = ElectroluxStatusFlowHandler()
-        with patch.object(
-            type(flow),
-            "show_advanced_options",
-            new_callable=PropertyMock,
-            return_value=True,
-        ):
-            schema = flow._get_config_schema({})
-        assert schema is not None
 
     # ------------------------------------------------------------------ #
     # Lines 410-415: main flow _test_credentials with unexpected exception

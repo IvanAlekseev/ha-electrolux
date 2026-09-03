@@ -7,10 +7,7 @@
                 "data": {
                     "api_key": "API raktas",
                     "access_token": "Prieigos prieigos raktas",
-                    "refresh_token": "Atnaujinti žetoną",
-                    "notifications": "Įgalinti pranešimus apie svarbius įspėjimus",
-                    "notifications_warning": "Įgalinti įspėjimų pranešimus",
-                    "notifications_diagnostic": "Įgalinti diagnostikos pranešimų pranešimus"
+                    "refresh_token": "Atnaujinti žetoną"
                 }
             },
             "reauth_validate": {
@@ -51,10 +48,7 @@
                 "data": {
                     "api_key": "API raktas",
                     "access_token": "Prieigos prieigos raktas",
-                    "refresh_token": "Atnaujinti žetoną",
-                    "notifications": "Įgalinti pranešimus apie svarbius įspėjimus",
-                    "notifications_warning": "Įgalinti įspėjimų pranešimus",
-                    "notifications_diagnostic": "Įgalinti diagnostikos pranešimų pranešimus"
+                    "refresh_token": "Atnaujinti žetoną"
                 }
             }
         },

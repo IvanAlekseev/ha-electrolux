@@ -7,10 +7,7 @@
                 "data": {
                     "api_key": "API-avain",
                     "access_token": "Käyttöoikeustunnus",
-                    "refresh_token": "Päivitä Token",
-                    "notifications": "Ota käyttöön kriittisten hälytysten ilmoitukset",
-                    "notifications_warning": "Ota käyttöön varoitusilmoitukset",
-                    "notifications_diagnostic": "Ota diagnostiikkaviestien ilmoitukset käyttöön"
+                    "refresh_token": "Päivitä Token"
                 }
             },
             "reauth_validate": {
@@ -51,10 +48,7 @@
                 "data": {
                     "api_key": "API-avain",
                     "access_token": "Käyttöoikeustunnus",
-                    "refresh_token": "Päivitä Token",
-                    "notifications": "Ota käyttöön kriittisten hälytysten ilmoitukset",
-                    "notifications_warning": "Ota käyttöön varoitusilmoitukset",
-                    "notifications_diagnostic": "Ota diagnostiikkaviestien ilmoitukset käyttöön"
+                    "refresh_token": "Päivitä Token"
                 }
             }
         },

@@ -7,10 +7,7 @@
                 "data": {
                     "api_key": "Klucz API",
                     "access_token": "Token dostępu",
-                    "refresh_token": "Odśwież token",
-                    "notifications": "Włącz powiadomienia o alertach krytycznych",
-                    "notifications_warning": "Włącz powiadomienia o ostrzeżeniach",
-                    "notifications_diagnostic": "Włącz powiadomienia o komunikatach diagnostycznych"
+                    "refresh_token": "Odśwież token"
                 }
             },
             "reauth_validate": {
@@ -51,10 +48,7 @@
                 "data": {
                     "api_key": "Klucz API",
                     "access_token": "Token dostępu",
-                    "refresh_token": "Odśwież token",
-                    "notifications": "Włącz powiadomienia o alertach krytycznych",
-                    "notifications_warning": "Włącz powiadomienia o ostrzeżeniach",
-                    "notifications_diagnostic": "Włącz powiadomienia o komunikatach diagnostycznych"
+                    "refresh_token": "Odśwież token"
                 }
             }
         },

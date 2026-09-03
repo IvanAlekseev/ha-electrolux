@@ -7,10 +7,7 @@
                 "data": {
                     "api_key": "API-nyckel",
                     "access_token": "Access Token",
-                    "refresh_token": "Uppdatera token",
-                    "notifications": "Aktivera aviseringar för kritiska varningar",
-                    "notifications_warning": "Aktivera aviseringar för varningar",
-                    "notifications_diagnostic": "Aktivera aviseringar för diagnostiska meddelanden"
+                    "refresh_token": "Uppdatera token"
                 }
             },
             "reauth_validate": {
@@ -51,10 +48,7 @@
                 "data": {
                     "api_key": "API-nyckel",
                     "access_token": "Access Token",
-                    "refresh_token": "Uppdatera token",
-                    "notifications": "Aktivera aviseringar för kritiska varningar",
-                    "notifications_warning": "Aktivera aviseringar för varningar",
-                    "notifications_diagnostic": "Aktivera aviseringar för diagnostiska meddelanden"
+                    "refresh_token": "Uppdatera token"
                 }
             }
         },

@@ -7,10 +7,7 @@
                 "data": {
                     "api_key": "API ključ",
                     "access_token": "Žeton za dostop",
-                    "refresh_token": "Osveži žeton",
-                    "notifications": "Omogoči obvestila za kritična opozorila",
-                    "notifications_warning": "Omogoči obvestila za opozorila",
-                    "notifications_diagnostic": "Omogoči obvestila za diagnostična sporočila"
+                    "refresh_token": "Osveži žeton"
                 }
             },
             "reauth_validate": {
@@ -51,10 +48,7 @@
                 "data": {
                     "api_key": "API ključ",
                     "access_token": "Žeton za dostop",
-                    "refresh_token": "Osveži žeton",
-                    "notifications": "Omogoči obvestila za kritična opozorila",
-                    "notifications_warning": "Omogoči obvestila za opozorila",
-                    "notifications_diagnostic": "Omogoči obvestila za diagnostična sporočila"
+                    "refresh_token": "Osveži žeton"
                 }
             }
         },

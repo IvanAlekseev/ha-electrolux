@@ -7,10 +7,7 @@
                 "data": {
                     "api_key": "API Schlëssel",
                     "access_token": "Zougang Token",
-                    "refresh_token": "Refresh Token",
-                    "notifications": "Aktivéiert Notifikatiounen fir kritesch Alarmer",
-                    "notifications_warning": "Aktivéiert Notifikatiounen fir Warnungen",
-                    "notifications_diagnostic": "Aktivéiert Notifikatiounen fir diagnostesch Messagen"
+                    "refresh_token": "Refresh Token"
                 }
             },
             "reauth_validate": {
@@ -51,10 +48,7 @@
                 "data": {
                     "api_key": "API Schlëssel",
                     "access_token": "Zougang Token",
-                    "refresh_token": "Refresh Token",
-                    "notifications": "Aktivéiert Notifikatiounen fir kritesch Alarmer",
-                    "notifications_warning": "Aktivéiert Notifikatiounen fir Warnungen",
-                    "notifications_diagnostic": "Aktivéiert Notifikatiounen fir diagnostesch Messagen"
+                    "refresh_token": "Refresh Token"
                 }
             }
         },

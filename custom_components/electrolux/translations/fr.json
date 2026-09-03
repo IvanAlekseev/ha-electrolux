@@ -7,10 +7,7 @@
                 "data": {
                     "api_key": "Clé API",
                     "access_token": "Jeton d'accès",
-                    "refresh_token": "Actualiser le jeton",
-                    "notifications": "Activer les notifications pour les alertes critiques",
-                    "notifications_warning": "Activer les notifications pour les avertissements",
-                    "notifications_diagnostic": "Activer les notifications pour les messages de diagnostic"
+                    "refresh_token": "Actualiser le jeton"
                 }
             },
             "reauth_validate": {
@@ -51,10 +48,7 @@
                 "data": {
                     "api_key": "Clé API",
                     "access_token": "Jeton d'accès",
-                    "refresh_token": "Actualiser le jeton",
-                    "notifications": "Activer les notifications pour les alertes critiques",
-                    "notifications_warning": "Activer les notifications pour les avertissements",
-                    "notifications_diagnostic": "Activer les notifications pour les messages de diagnostic"
+                    "refresh_token": "Actualiser le jeton"
                 }
             }
         },

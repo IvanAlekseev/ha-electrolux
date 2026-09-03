@@ -497,71 +497,6 @@ class TestCommandErrorClasses:
         assert isinstance(error, CommandError)
 
 
-class TestShouldSendNotification:
-    """Tests for should_send_notification utility."""
-
-    def test_not_needed_always_false(self):
-        """Returns False when alert_status is NOT_NEEDED regardless of config."""
-        from custom_components.electrolux.util import should_send_notification
-
-        config_entry = MagicMock()
-        config_entry.data = {
-            "notifications": True,
-            "notifications_warning": True,
-            "notifications_diagnostic": True,
-        }
-        assert should_send_notification(config_entry, "DEFAULT", "NOT_NEEDED") is False
-
-    def test_diagnostic_respects_config_true(self):
-        """DIAGNOSTIC alerts enabled when CONF_NOTIFICATION_DIAG is True."""
-        from custom_components.electrolux.util import should_send_notification
-
-        config_entry = MagicMock()
-        config_entry.data = {"notifications_diagnostic": True}
-        assert should_send_notification(config_entry, "DIAGNOSTIC", "NEW") is True
-
-    def test_diagnostic_respects_config_false(self):
-        """DIAGNOSTIC alerts disabled when CONF_NOTIFICATION_DIAG is False."""
-        from custom_components.electrolux.util import should_send_notification
-
-        config_entry = MagicMock()
-        config_entry.data = {"notifications_diagnostic": False}
-        assert should_send_notification(config_entry, "DIAGNOSTIC", "NEW") is False
-
-    def test_warning_respects_config_true(self):
-        """WARNING alerts enabled when CONF_NOTIFICATION_WARNING is True."""
-        from custom_components.electrolux.util import should_send_notification
-
-        config_entry = MagicMock()
-        config_entry.data = {"notifications_warning": True}
-        assert should_send_notification(config_entry, "WARNING", "NEW") is True
-
-    def test_warning_respects_config_false(self):
-        """WARNING alerts disabled when CONF_NOTIFICATION_WARNING is False."""
-        from custom_components.electrolux.util import should_send_notification
-
-        config_entry = MagicMock()
-        config_entry.data = {"notifications_warning": False}
-        assert should_send_notification(config_entry, "WARNING", "NEW") is False
-
-    def test_other_severity_uses_default_true(self):
-        """Non-DIAGNOSTIC/WARNING severity uses CONF_NOTIFICATION_DEFAULT."""
-        from custom_components.electrolux.util import should_send_notification
-
-        config_entry = MagicMock()
-        config_entry.data = {"notifications": True}
-        assert should_send_notification(config_entry, "CRITICAL", "NEW") is True
-
-    def test_other_severity_default_missing_returns_true(self):
-        """Non-DIAGNOSTIC/WARNING severity returns True when CONF_NOTIFICATION_DEFAULT not set."""
-        from custom_components.electrolux.util import should_send_notification
-
-        config_entry = MagicMock()
-        config_entry.data = {}
-        # get("notifications", True) returns True when missing
-        assert should_send_notification(config_entry, "CRITICAL", "NEW") is True
-
-
 class TestTimeConversions:
     """Tests for time conversion utilities."""
 
@@ -771,33 +706,6 @@ class TestGetCapability:
         cap = {"mode": {"values": {"COOL": {}}}}
         result = get_capability(cap, "mode")
         assert result is None
-
-
-class TestCreateNotification:
-    """Tests for create_notification utility function."""
-
-    def test_notification_not_sent_when_not_needed(self):
-        """No notification is created when should_send_notification returns False."""
-        from custom_components.electrolux.util import create_notification
-
-        hass = MagicMock()
-        config_entry = MagicMock()
-        config_entry.data = {}  # CONF_NOTIFICATION_DEFAULT defaults to True
-
-        # Alert status NOT_NEEDED → should not send
-        create_notification(hass, config_entry, "TestAlert", "DEFAULT", "NOT_NEEDED")
-        hass.async_create_task.assert_not_called()
-
-    def test_notification_sent_for_default_severity(self):
-        """Notification is created for default severity with default config."""
-        from custom_components.electrolux.util import create_notification
-
-        hass = MagicMock()
-        config_entry = MagicMock()
-        config_entry.data = {"notifications": True}
-
-        create_notification(hass, config_entry, "TestAlert", "DEFAULT", "NEW")
-        hass.async_create_task.assert_called_once()
 
 
 class TestMapCommandError:

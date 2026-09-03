@@ -7,10 +7,7 @@
                 "data": {
                     "api_key": "API kľúč",
                     "access_token": "Prístupový token",
-                    "refresh_token": "Obnoviť token",
-                    "notifications": "Povoliť upozornenia na kritické upozornenia",
-                    "notifications_warning": "Povoliť upozornenia na upozornenia",
-                    "notifications_diagnostic": "Povoliť upozornenia na diagnostické správy"
+                    "refresh_token": "Obnoviť token"
                 }
             },
             "reauth_validate": {
@@ -51,10 +48,7 @@
                 "data": {
                     "api_key": "API kľúč",
                     "access_token": "Prístupový token",
-                    "refresh_token": "Obnoviť token",
-                    "notifications": "Povoliť upozornenia na kritické upozornenia",
-                    "notifications_warning": "Povoliť upozornenia na upozornenia",
-                    "notifications_diagnostic": "Povoliť upozornenia na diagnostické správy"
+                    "refresh_token": "Obnoviť token"
                 }
             }
         },

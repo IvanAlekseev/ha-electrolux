@@ -7,10 +7,7 @@
                 "data": {
                     "api_key": "API atslēga",
                     "access_token": "Piekļuves marķieris",
-                    "refresh_token": "Atsvaidzināt marķieri",
-                    "notifications": "Iespējot paziņojumus par kritiskiem brīdinājumiem",
-                    "notifications_warning": "Iespējot brīdinājumu paziņojumus",
-                    "notifications_diagnostic": "Iespējot diagnostikas ziņojumu paziņojumus"
+                    "refresh_token": "Atsvaidzināt marķieri"
                 }
             },
             "reauth_validate": {
@@ -51,10 +48,7 @@
                 "data": {
                     "api_key": "API atslēga",
                     "access_token": "Piekļuves marķieris",
-                    "refresh_token": "Atsvaidzināt marķieri",
-                    "notifications": "Iespējot paziņojumus par kritiskiem brīdinājumiem",
-                    "notifications_warning": "Iespējot brīdinājumu paziņojumus",
-                    "notifications_diagnostic": "Iespējot diagnostikas ziņojumu paziņojumus"
+                    "refresh_token": "Atsvaidzināt marķieri"
                 }
             }
         },

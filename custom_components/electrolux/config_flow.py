@@ -14,7 +14,6 @@ from homeassistant.config_entries import (
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowHandler, FlowResult
-from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession  # noqa: F401
 from homeassistant.helpers.selector import (
@@ -27,9 +26,6 @@ from .api import UserInput
 from .const import (
     CONF_ACCESS_TOKEN,
     CONF_API_KEY,
-    CONF_NOTIFICATION_DEFAULT,
-    CONF_NOTIFICATION_DIAG,
-    CONF_NOTIFICATION_WARNING,
     CONF_REFRESH_TOKEN,
     DOMAIN,
 )
@@ -357,23 +353,6 @@ class ElectroluxStatusFlowHandler(ConfigFlow, domain=DOMAIN):  # type: ignore[ca
                 TextSelectorConfig(type=TextSelectorType.PASSWORD, autocomplete="refresh-token")
             ),
         }
-        if self.show_advanced_options:
-            data_schema.update(
-                {
-                    vol.Optional(
-                        CONF_NOTIFICATION_DEFAULT,
-                        default=defaults.get(CONF_NOTIFICATION_DEFAULT, True),
-                    ): cv.boolean,
-                    vol.Optional(
-                        CONF_NOTIFICATION_WARNING,
-                        default=defaults.get(CONF_NOTIFICATION_WARNING, False),
-                    ): cv.boolean,
-                    vol.Optional(
-                        CONF_NOTIFICATION_DIAG,
-                        default=defaults.get(CONF_NOTIFICATION_DIAG, False),
-                    ): cv.boolean,
-                }
-            )
         return vol.Schema(data_schema)
 
     async def _show_config_form(self, user_input, step_id="user") -> ConfigFlowResult:
@@ -419,9 +398,6 @@ class ElectroluxStatusOptionsFlowHandler(OptionsFlow):
         current_api_key = self._config_entry.data.get(CONF_API_KEY, "")
         current_access_token = self._config_entry.data.get(CONF_ACCESS_TOKEN, "")
         current_refresh_token = self._config_entry.data.get(CONF_REFRESH_TOKEN, "")
-        current_notify_default = self._config_entry.data.get(CONF_NOTIFICATION_DEFAULT, True)
-        current_notify_warning = self._config_entry.data.get(CONF_NOTIFICATION_WARNING, False)
-        current_notify_diag = self._config_entry.data.get(CONF_NOTIFICATION_DIAG, False)
 
         # For security, never pre-fill access_token and refresh_token fields
         # Users should generate new credentials from the portal
@@ -439,9 +415,6 @@ class ElectroluxStatusOptionsFlowHandler(OptionsFlow):
                 vol.Optional(CONF_REFRESH_TOKEN, default=current_refresh_token): TextSelector(
                     TextSelectorConfig(type=TextSelectorType.PASSWORD, autocomplete="refresh-token")
                 ),
-                vol.Optional(CONF_NOTIFICATION_DEFAULT, default=current_notify_default): cv.boolean,
-                vol.Optional(CONF_NOTIFICATION_WARNING, default=current_notify_warning): cv.boolean,
-                vol.Optional(CONF_NOTIFICATION_DIAG, default=current_notify_diag): cv.boolean,
             }
         )
 
@@ -481,15 +454,9 @@ class ElectroluxStatusOptionsFlowHandler(OptionsFlow):
         new_data = dict(self._config_entry.data)
         new_options = dict(self._config_entry.options)
 
-        # API credentials and notifications go in data (require restart)
+        # API credentials go in data (require restart)
         if credential_data:
             new_data.update(credential_data)
-        if CONF_NOTIFICATION_DEFAULT in user_input:
-            new_data[CONF_NOTIFICATION_DEFAULT] = user_input.get(CONF_NOTIFICATION_DEFAULT)
-        if CONF_NOTIFICATION_WARNING in user_input:
-            new_data[CONF_NOTIFICATION_WARNING] = user_input.get(CONF_NOTIFICATION_WARNING)
-        if CONF_NOTIFICATION_DIAG in user_input:
-            new_data[CONF_NOTIFICATION_DIAG] = user_input.get(CONF_NOTIFICATION_DIAG)
 
         self.hass.config_entries.async_update_entry(self._config_entry, data=new_data, options=new_options)
         return self.async_create_entry(title="", data={})

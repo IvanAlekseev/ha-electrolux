@@ -83,9 +83,6 @@ class ApplianceDesyncAttribute(StrEnum):
 
 
 # Configuration and options
-CONF_NOTIFICATION_DEFAULT = "notifications"
-CONF_NOTIFICATION_DIAG = "notifications_diagnostic"
-CONF_NOTIFICATION_WARNING = "notifications_warning"
 CONF_API_KEY = "api_key"
 CONF_ACCESS_TOKEN = "access_token"
 CONF_REFRESH_TOKEN = "refresh_token"

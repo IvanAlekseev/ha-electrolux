@@ -12,7 +12,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import SENSOR, TIME_INVALID_SENTINEL
 from .entity import ElectroluxEntity
-from .util import create_notification, get_capability, time_seconds_to_minutes
+from .util import get_capability, time_seconds_to_minutes
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 PARALLEL_UPDATES = 0
@@ -296,14 +296,5 @@ class ElectroluxSensor(ElectroluxEntity, SensorEntity):
                             severity = alert.get("severity", "Alert")
                             status = alert.get("acknowledgeStatus", "")
                             alert_types[name] = f"{severity}-{status}"
-                            title = self.name if isinstance(self.name, str) else self._name
-                            create_notification(
-                                self.hass,
-                                self.config_entry,
-                                alert_name=name,
-                                alert_severity=severity,
-                                alert_status=status,
-                                title=title,
-                            )
             return alert_types
         return {}

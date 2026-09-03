@@ -7,10 +7,7 @@
                 "data": {
                     "api_key": "API-sleutel",
                     "access_token": "Toegangstoken",
-                    "refresh_token": "Token vernieuwen",
-                    "notifications": "Schakel meldingen in voor kritieke waarschuwingen",
-                    "notifications_warning": "Schakel meldingen voor waarschuwingen in",
-                    "notifications_diagnostic": "Schakel meldingen voor diagnostische berichten in"
+                    "refresh_token": "Token vernieuwen"
                 }
             },
             "reauth_validate": {
@@ -51,10 +48,7 @@
                 "data": {
                     "api_key": "API-sleutel",
                     "access_token": "Toegangstoken",
-                    "refresh_token": "Token vernieuwen",
-                    "notifications": "Schakel meldingen in voor kritieke waarschuwingen",
-                    "notifications_warning": "Schakel meldingen voor waarschuwingen in",
-                    "notifications_diagnostic": "Schakel meldingen voor diagnostische berichten in"
+                    "refresh_token": "Token vernieuwen"
                 }
             }
         },

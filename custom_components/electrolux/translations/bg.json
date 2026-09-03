@@ -7,10 +7,7 @@
                 "data": {
                     "api_key": "API ключ",
                     "access_token": "Токен за достъп",
-                    "refresh_token": "Опресняване на токена",
-                    "notifications": "Активирайте известията за критични сигнали",
-                    "notifications_warning": "Активирайте известията за предупреждения",
-                    "notifications_diagnostic": "Активирайте известията за диагностични съобщения"
+                    "refresh_token": "Опресняване на токена"
                 }
             },
             "reauth_validate": {
@@ -51,10 +48,7 @@
                 "data": {
                     "api_key": "API ключ",
                     "access_token": "Токен за достъп",
-                    "refresh_token": "Опресняване на токена",
-                    "notifications": "Активирайте известията за критични сигнали",
-                    "notifications_warning": "Активирайте известията за предупреждения",
-                    "notifications_diagnostic": "Активирайте известията за диагностични съобщения"
+                    "refresh_token": "Опресняване на токена"
                 }
             }
         },

@@ -9,14 +9,14 @@
 - __fix(coordinator): add progressive exponential backoff on stream setup and rotation failure (#184)__ by @IvanAlekseev Extends the same backoff to SSE stream *setup* and connection-rotation failures, not just stall-triggered restarts.
 - __fix(auth): enforce strict backoff cooldown on token refresh failures and classify transient errors (#176)__ by @IvanAlekseev Repeated token-refresh failures no longer hammer the login endpoint; transient network errors are classified correctly so they don't count as auth failures.
 - __fix: cancel timeToEnd and SSE watchdog tasks on config entry unload (#181)__ by @TTLucian Watchdog timers are properly cleaned up when the integration is reloaded, preventing orphaned background tasks.
-- __fix(coordinator): replace timer-based stream watchdog with REST state desync validation (#186) by @IvanAlekseev
-- __fix(models): map catalog-only string+readwrite capabilities to SELECT entities (#195) by TTLucian
+- __fix(coordinator): replace timer-based stream watchdog with REST state desync validation (#186)__ by @IvanAlekseev
+- __fix(models): map catalog-only string+readwrite capabilities to SELECT entities (#195)__ by TTLucian
 
 ## ✨ Features
 
 - __feat(diagnostics): add Electrolux Cloud service device with REST API and SSE stream diagnostic sensors (#183)__ by @IvanAlekseev New service device exposing REST API and SSE stream connectivity diagnostics (with failure debouncing and a reconnection grace period), disabled by default — useful for debugging connectivity issues.
 - __feat(rvc): add 700series vacuum entity + diagnostic sensors (#175)__ by @Alex Romanov (netflash)
-- __feat(coordinator): add event-driven desync recovery when timeToEnd decrements (#187) by @IvanAlekseev
+- __feat(coordinator): add event-driven desync recovery when timeToEnd decrements__ (#187) by @IvanAlekseev
 
 ## 🔧 Internal / chores
 

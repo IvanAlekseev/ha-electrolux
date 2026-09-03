@@ -92,7 +92,7 @@ If you own one of these appliances, please download your diagnostics from **Sett
 | ❄️ **AC variants** (`CA`, `Azul`, `Panther`, `Telica`) | `AC variant diagnostics — [your type/model]` | Registered in v3.5.6, unverified (`Bogong` now verified — see above) |
 | 💨 **AP variants** (`Fuji`, `WELLA5`, `WELLA7`) | `AP variant diagnostics — [your type/model]` | `Muju`, `Verbier`, and `PUREA9` verified from root `samples/`; `Fuji` / `WELLA5` / `WELLA7` still unverified |
 
-Washing machines, tumple dryers, dishwashers, washer dryers, ovens,  diagnostics are already covered by the current sample set, so no further `WM`, `TD`, `DW`, `WD`, `OV` samples are needed at this time. Upload them only if there are problems with their entities.
+Washing machines, tumble dryers, dishwashers, washer dryers, ovens,  diagnostics are already covered by the current sample set, so no further `WM`, `TD`, `DW`, `WD`, `OV` samples are needed at this time. Upload them only if there are problems with their entities.
 
 ### �🔍 Finding Your Model Number
 
@@ -121,6 +121,10 @@ If your model number appears in the table above, your appliance has been verifie
 ## 🤝 Contributing
 
 - [netflash](https://github.com/netflash)
+
+- [IvanAlekseev](https://github.com/IvanAlekseev)
+
+- [tanarchytan](https://github.com/tanarchytan)
 
 - [joeblack2k](https://github.com/joeblack2k)
 
@@ -785,6 +789,6 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 # 👨‍💻 Status update:
 Due to the recent GitHub Copilot usage price skyrocketing starting from 1st of July 2026, future updates and fixes for this integration will be released at a much slower pace.
 
-In the past, I was able to fully develop major features of this integration with just a $10 Github Copilot subscription. However, at the current pricing, I rely only on donations and free AI agents and maintaining the previous fast development cycle is no longer feasible.
+In the past, I was able to fully develop major features of this integration with just a $10 Github Copilot subscription. However, at the current pricing, I rely only on donations, other developers/users code contributions and free AI agents. Maintaining the previous fast development cycle is no longer feasible.
 
 The project remains active, but development will continue at a reduced, sustainable pace.

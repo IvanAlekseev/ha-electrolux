@@ -15,7 +15,7 @@
 ## ✨ Features
 
 - __feat(diagnostics): add Electrolux Cloud service device with REST API and SSE stream diagnostic sensors (#183)__ by @IvanAlekseev New service device exposing REST API and SSE stream connectivity diagnostics (with failure debouncing and a reconnection grace period), disabled by default — useful for debugging connectivity issues.
-- __feat(rvc): add 700series vacuum entity + diagnostic sensors (#175)__ by @Alex Romanov (netflash)
+- __feat(rvc): add 700series vacuum entity + diagnostic sensors (#175)__ by @netflash
 - __feat(coordinator): add event-driven desync recovery when timeToEnd decrements__ (#187) by @IvanAlekseev
 
 ## 🔧 Internal / chores

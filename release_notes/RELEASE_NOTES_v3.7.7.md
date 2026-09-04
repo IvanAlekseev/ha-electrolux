@@ -29,11 +29,6 @@ Even seemingly small issues or unusual appliance behaviour can be valuable, as t
 If you own an appliance type that hasn't been tested, your feedback is especially valuable. See [README.md](https://github.com/TTLucian/ha-electrolux/blob/main/README.md) for more information.
 
 ## 🌟 Credits
-BIG thank-yous to all contributors:
-- [netflash](https://github.com/netflash)
-- [IvanAlekseev](https://github.com/IvanAlekseev)
-- [tanarchytan](https://github.com/tanarchytan)
-
-BIG thank-yous to all supporters!
+BIG thank-yous to all contributors and to all supporters!
 
 Without you, this project would not have been possible.
